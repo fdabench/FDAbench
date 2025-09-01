@@ -1,0 +1,1 @@
+{"instance_id": "bird133", "db": "movielens", "question": "How many female actors have been played a role in any of French or USA movies?", "external_knowledge": "French and USA are two countries; Female actors mean that a_gender = 'F'"}

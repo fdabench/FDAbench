@@ -1,0 +1,1 @@
+SELECT COUNT(T2.actorid) FROM movies AS T1 INNER JOIN movies2actors AS T2 ON T1.movieid = T2.movieid WHERE T1.country IN ('France', 'USA')

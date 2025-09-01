@@ -1,0 +1,3 @@
+original_column_name,column_name,column_description,data_format,value_description
+CustomerID,customer id,unique id number indicating which customer,integer,
+Customer Names,customer names,the name of the customer,text,

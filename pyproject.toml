@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fdabench"
+version = "0.1.0"
+authors = [
+    {name = "FDABench Team", email = "contact@fdabench.com"},
+]
+description = "A comprehensive database benchmark suite for evaluating DB agents with LLM capabilities"
+readme = "FDABench/README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["database", "agent", "llm", "benchmark", "sql", "evaluation"]
+dependencies = [
+    "openai>=1.0.0",
+    "requests>=2.28.0",
+    "pandas>=1.5.0",
+    "numpy>=1.21.0",
+    "duckdb>=0.8.0",
+    "rouge-score>=0.1.2",
+    "nltk>=3.8",
+    "sentence-transformers>=2.2.0",
+    "sacrebleu>=2.3.0",
+    "python-dotenv>=0.19.0",
+    "tqdm>=4.64.0",
+    "typing-extensions>=4.0.0",
+    "beautifulsoup4>=4.11.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=0.991",
+    "pre-commit>=2.20.0",
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=0.18.0",
+]
+full = [
+    "transformers>=4.20.0",
+    "torch>=1.12.0",
+    "faiss-cpu>=1.7.0",
+]
+
+# [project.scripts]
+# fdabench = "FDABench.cli:main"  # CLI not implemented yet
+
+[project.urls]
+Homepage = "https://github.com/fdabench/fdabench"
+Documentation = "https://fdabench.readthedocs.io"
+Repository = "https://github.com/fdabench/fdabench.git"
+Issues = "https://github.com/fdabench/fdabench/issues"
+
+[tool.setuptools.packages.find]
+where = ["FDABench"]
+
+[tool.setuptools.package-data]
+"FDABench" = ["prompts/*.json", "examples/*.py", "*.md"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88

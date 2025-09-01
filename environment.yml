@@ -1,0 +1,114 @@
+name: fdabench
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python and system packages
+  - python=3.11
+  - pip
+  
+  # Data science and computation packages (conda versions preferred)
+  - numpy>=1.21.0
+  - pandas>=1.5.0
+  - scipy>=1.16.0
+  - scikit-learn
+  
+  # ML/AI frameworks
+  - pytorch>=1.11.0
+  - transformers>=4.41.0
+  - tokenizers
+  - safetensors
+  
+  # Database packages
+  - sqlite>=3.45.0
+  - duckdb>=0.8.0
+  
+  # Text processing
+  - nltk>=3.8
+  - regex
+  
+  # Web and HTTP
+  - requests>=2.28.0
+  - beautifulsoup4>=4.11.0
+  - lxml>=4.9.0
+  
+  # Utilities
+  - tqdm>=4.64.0
+  - pyyaml
+  - python-dotenv>=0.19.0
+  - typing-extensions>=4.0.0
+  
+  # Development tools
+  - setuptools
+  - wheel
+  
+  # Pip packages (not available in conda or better versions in pip)
+  - pip:
+    # LLM and API clients
+    - openai>=1.0.0
+    - anthropic
+    
+    # Evaluation metrics
+    - rouge-score>=0.1.2
+    - sacrebleu>=2.3.0
+    - sentence-transformers>=2.2.0
+    
+    # Specialized ML packages
+    - huggingface-hub>=0.20.0
+    - accelerate
+    - peft
+    - bitsandbytes
+    
+    # Database and SQL tools
+    - sqlalchemy>=2.0.0
+    - psycopg2-binary
+    - google-cloud-bigquery
+    
+    # Vector databases and search
+    - chromadb
+    - faiss-cpu
+    
+    # Data processing and analysis
+    - datasets>=4.0.0
+    - pyarrow
+    - palimpzest
+    - docetl
+    
+    # API frameworks
+    - fastapi
+    - uvicorn
+    - gradio
+    
+    # LangChain ecosystem
+    - langchain
+    - langchain-core
+    - langchain-community
+    - langchain-openai
+    - langchain-anthropic
+    - langsmith
+    
+    # LlamaIndex ecosystem
+    - llama-index
+    - llama-index-core
+    - llama-index-llms-openai
+    - llama-index-embeddings-openai
+    
+    # Specialized tools
+    - litellm
+    - tenacity
+    - backoff
+    - posthog
+    
+    # Development and testing
+    - pytest>=7.0.0
+    - pytest-mock
+    - ruff
+    
+    # Optional packages for full functionality
+    - jupyter
+    - ipython
+    - matplotlib
+    - pillow
+    
+    # Install FDABench in development mode
+    - -e .

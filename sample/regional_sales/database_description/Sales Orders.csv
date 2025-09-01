@@ -1,0 +1,27 @@
+original_column_name,column_name,column_description,data_format,value_description
+OrderNumber,Order Number,the unique number identifying the order,text,
+Sales Channel,,Sales Channel,text," In-Store
+ Online
+ Distributor
+ Wholesale"
+WarehouseCode,Warehouse Code,Warehouse Code,text,"commonsense evidence:
+if the warehouse code is the same, it means this product is shipped from the same ware house"
+ProcuredDate,Procured Date,Procured Date,text,"commonsense evidence:
+date: month/date/year, 17--> 2017"
+OrderDate,Order Date,Order Date,text,
+ShipDate,Ship Date,Ship Date,text,
+DeliveryDate,Delivery Date,Delivery Date,text,"commonsense evidence:
+the difference ""DeliveryDate - OrderDate"" is smaller, it means faster delivery"
+CurrencyCode,Currency Code,Currency Code,text,USD
+_SalesTeamID,_Sales Team ID,Sales Team ID,integer,
+_CustomerID,_Customer ID,_Customer ID,integer,
+_StoreID,_Store ID,_Store ID,integer,
+_ProductID,_Product ID,_Product ID,integer,
+Order Quantity,,Order Quantity,integer,"commonsense evidence:
+1 - 8:
+higher means order quantity is higher or customer needs more"
+Discount Applied,,Discount Applied,real,"commonsense evidence:
+0.2: 20% discount"
+Unit Price,,,text,
+Unit Cost,,,text,"commonsense evidence:
+net profit = Unit Price - Unit Cost"

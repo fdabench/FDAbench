@@ -1,0 +1,26 @@
+original_column_name,column_name,column_description,data_format,value_description
+StoreID,Store ID,unique store id,integer,
+City Name,City Name,City Name,text,
+County,,full county name,text,
+StateCode,State Code,state code,text,
+State,,full state name,text,
+Type,,type of the store,text,"City
+Town
+CDP (customer data platform)
+Unified Government
+Consolidated Government
+Other
+Township
+Urban County 
+Borough
+Metropolitan Government"
+Latitude,,Latitude,real,
+Longitude,,Longitude,real,"commonsense evidence:
+coordinates or detailed position: (Latitude, Longitude)"
+AreaCode,Area Code,,integer,
+Population,,Population,integer,
+Household Income,,Household Income,integer,
+Median Income,,Median Income,integer,
+Land Area,,Land Area,integer,
+Water Area,,Water Area,integer,
+Time Zone,,Time Zone,text,
