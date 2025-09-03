@@ -1,7 +1,7 @@
 # FDABench
-
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473)
 
 **FDABench** is the first data agent benchmark specifically designed for evaluating agents in multi-source data analytical scenarios. Our contributions include: (i) we construct a standard benchmark with 2,007 diverse tasks across different data sources, domains, difficulty levels, and task types to comprehensively evaluate data agent performance; (ii) we design an agent-expert collaboration dataset generation framework ensuring reliable and efficient heterogeneous data benchmark construction; (iii) we equip FDABench with strong generalization capabilities across diverse target systems and frameworks. We use FDABench to evaluate various data agent systems, revealing that each data agent system exhibits distinct advantages and limitations regarding response quality, accuracy, latency, and token cost.
 
