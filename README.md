@@ -110,7 +110,11 @@ FDABench supports multiple database types. You need to configure database paths 
 
 **BigQuery and Snowflake**: Follow registration and setup instructions from [Spider2 README](https://github.com/xlang-ai/Spider2/blob/main/README.md)
 
-#### 3. Configure Database Paths
+#### 3. Unstructured Data
+
+**Unstructured Dataset**: Download from [Google Drive](https://drive.google.com/file/d/1so5dvpB2aroy4NMaxh4FmnmGhGhPGvIs/view?usp=sharing)
+
+#### 4. Configure Database Paths
 
 Edit `FDABench/utils/database_connection_manager.py` and update the configuration:
 
