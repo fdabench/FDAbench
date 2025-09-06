@@ -16,18 +16,18 @@
 - **Open-Source Data Agents Implementations**: Provides several ready-to-use data agent workflow implementations 
 - **Agents Evaluation Framework**: Comprehensive support for evaluating diverse data agent architectures including Tool-Use Agents, Multi-Agent Systems, Planning Agents, and Reflection Agents
 - **Universal Database Compatibility**: Seamlessly integrates with multiple database systems and real-world production environments
-- **Flexible Task Architecture**: Supports three distinct workload types - single-choice questions, multiple-choice scenarios, and open-ended report generation tasks
-- **Advanced Evaluation Metrics**: Built-in comprehensive evaluation system with detailed performance analytics and statistical insights
-- **Rich Tool Ecosystem**: Extensive collection of integrated tools including database schema analysis, SQL query optimization, web search capabilities, and vector database operations
+- **Flexible Data Agent Task Architecture**: Supports three distinct workload types - single-choice questions, multiple-choice scenarios, and open-ended report generation tasks
+- **Advanced Evaluation Metrics**: Built-in comprehensive evaluation system with detailed performance analytics and statistical insights about data agent systems
+- **Rich Agent Tool Ecosystem**: Extensive collection of integrated tools including database schema analysis, SQL query optimization, web search capabilities, and vector database operations
 - **Extensible Agent Framework**: Modular base classes and interfaces that enable easy implementation and integration of custom agent architectures
-- **Cost Monitoring**: Real-time token usage tracking and cost analysis for performance optimization and budget management
+- **Cost Monitoring**: Token usage tracking and cost analysis for data agent performance optimization and budget management
 
 ## Benchmark Workload
 
 ### Task Categories
 - **Single Choice**: Multiple choice questions with one correct answer
 - **Multiple Choice**: Questions allowing multiple correct answers
-- **Free-form Report**: Open-ended analytical tasks requiring comprehensive database analysis
+- **Report Mode**: Open-ended analytical tasks requiring comprehensive database analysis
 
 ### Data Agent Interface
 The benchmark uses a standardized agent interface that abstracts away implementation details, allowing fair comparison across different agent architectures and approaches.
@@ -37,8 +37,6 @@ The benchmark uses a standardized agent interface that abstracts away implementa
 ### System Requirements
 
 - **Python:** 3.10+
-- **RAM:** 8GB+ recommended
-- **Storage:** 5GB+ free space
 - **OS:** Linux, macOS, Windows
 
 ### Option 1: One-Command Setup (Recommended)
@@ -168,9 +166,9 @@ export DATASET_PATH="/path/to/your/test/dataset"
 test_data = load_test_data("path/to/your/dataset.json")
 ```
 
-### Available Examples
+### Examples
 
-Test different agent implementations:
+Test different agent workflows:
 
 ```bash
 # Planning Agent - Uses step-by-step planning
@@ -186,9 +184,9 @@ python examples/run_reflection_agent.py
 python examples/run_tooluse_agent.py
 ```
 
-#### Semantic Operator Agents
+#### Data Agent with emantic Operator
 
-Specialized agents integrated with semantic data operators for advanced data processing:
+Data agents integrated with semantic data operators for advanced data processing:
 
 ```bash
 # DocETL Semantic Operator Agent - Uses DocETL operators for document processing
@@ -201,7 +199,7 @@ python FDABench/examples/test_planning_agent_lotus_batch.py
 python FDABench/examples/test_planning_agent_pz_batch.py
 ```
 
-**Note**: Semantic operator agents require additional environment setup. Check the respective environment files:
+**Note**: Data Agent with semantic operator require additional environment setup. Check the respective environment files:
 - `FDABench/examples/docetl_environment.yml`
 - `FDABench/examples/lotus_environment.yml` 
 - `FDABench/examples/palimpzest_environment.yml`
@@ -279,7 +277,7 @@ class YourCustomAgent(BaseAgent):
 
 ### Supported Integrations
 
-- **OpenAI**: GPT-3.5, GPT-4, and other OpenAI models
+- **OpenAI**: GPT-5, and other OpenAI models
 - **LangChain**: Full LangChain ecosystem support
 - **Private APIs**: Custom API integrations
 - **Local Models**: Support for locally hosted LLMs
@@ -292,7 +290,7 @@ The benchmark uses a structured JSON format for test cases:
 
 ```json
 {
-    "task_id": "FAD123",
+    "task_id": "FDA123",
     "instance_id": "bq001",
     "db": "ga360",
     "level": "hard",
@@ -329,16 +327,9 @@ Datasets can be loaded using the built-in utilities or provided as custom paths 
 
 - **Accuracy**: Percentage of correctly answered questions
 - **Execution Success**: Rate of successful SQL query execution
-- **Latency**: Average response time per query
-- **Token Efficiency**: Tokens used per successful query
+- **Latency**: Average ent-to-end response time per query
 - **Tool Usage Score**: Effectiveness of tool selection and usage
 
-### Advanced Analytics
-
-- **Error Analysis**: Categorization of failure modes
-- **Complexity Scaling**: Performance across different difficulty levels
-- **Database Type Performance**: Results segmented by database system
-- **Agent Architecture Comparison**: Comparative analysis across agent types
 
 ## Directory Structure
 
