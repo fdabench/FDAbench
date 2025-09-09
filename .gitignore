@@ -88,3 +88,15 @@ resource/databases/stacking.sqlite
 resource/databases/WWE.sqlite
 resource/file_system/
 agents/example_query.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+FDABench/core/__pycache__/
+FDABench/utils/__pycache__/

@@ -3,6 +3,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473)
 
+## 📰 News
+
+- **[2025-09-08]** 🎉 We are excited to announce the release of FDAbench on HuggingFace! FDABench now seamlessly loads data directly from [FDAbench2026/Fdabench-Lite](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite), featuring 289 pure SQLite test cases across three task categories (report, single, multiple) to help users get started more quickly. Additionally, we also offer FDABench-Full with 2007 test cases on HuggingFace.
+
 **FDABench** is the first data agent benchmark specifically designed for evaluating agents in multi-source data analytical scenarios. Our contributions include: (i) we construct a standard benchmark with 2,007 diverse tasks across different data sources, domains, difficulty levels, and task types to comprehensively evaluate data agent performance; (ii) we design an agent-expert collaboration dataset generation framework ensuring reliable and efficient heterogeneous data benchmark construction; (iii) we equip FDABench with strong generalization capabilities across diverse target systems and frameworks. We use FDABench to evaluate various data agent systems, revealing that each data agent system exhibits distinct advantages and limitations regarding response quality, accuracy, latency, and token cost.
 
 ## Overview
@@ -39,7 +43,7 @@ The benchmark uses a standardized agent interface that abstracts away implementa
 - **Python:** 3.10+
 - **OS:** Linux, macOS, Windows
 
-### Option 1: One-Command Setup (Recommended)
+### Option 1: One-Command Setup
 
 Create the complete environment with all dependencies:
 
@@ -82,19 +86,25 @@ echo "OPENROUTER_API_KEY=your-openrouter-api-key" >> .env
 
 After completing the environment setup above, you can immediately start using FDABench:
 
-### Run Examples
+### Dataset Loading
 
-**Built-in Sample Data**: The examples use sample data by default (`sample/sample_data.json` with `sample/regional_sales/regional_sales.sqlite` database) for immediate testing - no configuration needed!
+**HuggingFace Dataset**: FDABench now loads data directly from the HuggingFace dataset hub. The dataset `FDAbench2026/Fdabench-Lite` contains 289 curated test cases in three tasks for immediate use. We also offer FDABench-Full with 2007 test cases on HuggingFace.
 
 ```bash
 # Activate your environment (if not already active)
 conda activate fdabench
 
-# Run your first example with built-in sample data
+# Run your first example - automatically loads from HuggingFace
 python examples/run_planning_agent.py
+
+# Run with a specific sample (0-116 available)
+python examples/run_planning_agent.py --index 10
+
+# Run with a custom model
+python examples/run_planning_agent.py --model "openai/gpt-4" --index 5
 ```
 
-**Note**: If you want to run the full benchmark dataset with 2,007 tasks, follow the database configuration steps below:
+**Note**: The dataset will be automatically downloaded from HuggingFace on first use. If you want to run with local databases, need to follow the database configuration steps below:
 
 ### Database Configuration
 
@@ -156,36 +166,49 @@ your_databases/
     └── bigquery-service-account.json
 ```
 
-#### 5. Dataset Path Configuration
+#### 5. Dataset Configuration
 
-**Full Benchmark Dataset**: The complete FDABench dataset with 2,007 diverse tasks across multiple domains and difficulty levels is available in `dataset/` directory.
+**HuggingFace Dataset (Default)**: The benchmark uses the `FDAbench2026/Fdabench-Lite` dataset from HuggingFace, which includes:
+- 289 curated test cases
+- Three subsets (report, single, multiple )
+- Multiple database types (BIRD, local, Spider2-lite)
+- Various difficulty levels (easy, medium, hard)
 
-**Custom Datasets**: For your own datasets, you can:
+**Loading Data in Your Code**:
 
-```bash
-# Option 1: Environment variable
-export DATASET_PATH="/path/to/your/test/dataset"
+```python
+from FDABench.utils.test_utils import load_test_data
 
-# Option 2: Pass custom path to load_test_data() function
-test_data = load_test_data("path/to/your/dataset.json")
+# Load the first sample (default)
+test_data = load_test_data()
+
+# Load a specific sample by index (0-116)
+test_data = load_test_data(index=10)
 ```
+
+**Custom Local Datasets**: If you have your own test data, you can still use local JSON files by modifying the `load_test_data()` function in `FDABench/utils/test_utils.py`.
 
 ### Examples
 
-Test different agent workflows:
+Test different agent workflows with HuggingFace dataset:
 
 ```bash
 # Planning Agent - Uses step-by-step planning
-python examples/run_planning_agent.py
+python examples/run_planning_agent.py                # Default: index 0
+python examples/run_planning_agent.py --index 25     # Specific sample
 
 # Multi-Agent - Coordinates multiple specialized agents
-python examples/run_multi_agent.py
+python examples/run_multi_agent.py --index 10
 
 # Reflection Agent - Self-improving with reflection
-python examples/run_reflection_agent.py
+python examples/run_reflection_agent.py --index 50
 
 # Tool-Use Agent - Optimized for tool selection
-python examples/run_tooluse_agent.py
+python examples/run_tooluse_agent.py --index 100
+
+# All agents support the same parameters:
+# --index N: Select sample N from the dataset (0-116)
+# --model "model_name": Specify the LLM model to use
 ```
 
 #### Data Agent with emantic Operator
@@ -213,6 +236,7 @@ python FDABench/examples/test_planning_agent_pz_batch.py
 ```python
 from FDABench.agents.planning_agent import PlanningAgent
 from FDABench.evaluation.evaluation_tools import ReportEvaluator
+from FDABench.utils.test_utils import load_test_data
 
 # Initialize agent with your preferred model
 agent = PlanningAgent(
@@ -220,16 +244,21 @@ agent = PlanningAgent(
     api_key="your-api-key"
 )
 
-# Process a single query
-test_data = {
-    "task_id": "example_task",
-    "query": "What are the top 5 sales regions?",
-    "question_type": "report",
-    "db": "sales_database"
-}
+# Load test data from HuggingFace dataset
+test_data = load_test_data(index=0)  # Load first sample
+print(f"Processing task: {test_data['task_id']}")
+print(f"Database: {test_data['db']}")
+print(f"Question type: {test_data['question_type']}")
 
+# Process the query
 result = agent.process_query_from_json(test_data)
 print(f"Generated report: {result['report'][:200]}...")
+
+# Load and process multiple samples
+for i in range(5):
+    test_data = load_test_data(index=i)
+    result = agent.process_query_from_json(test_data)
+    print(f"Task {i}: {test_data['task_id']} - Completed")
 ```
 
 ### Output and Results
@@ -313,18 +342,6 @@ The benchmark uses a structured JSON format for test cases:
 }
 ```
 
-### Dataset Structure
-
-```
-dataset_path/
-├── task_type_mapping.json          # Maps task IDs to agent types
-├── test_singlechoice.json         # Single choice questions
-├── test_multichoice.json          # Multiple choice questions  
-└── test_report.json               # Report generation tasks
-```
-
-Datasets can be loaded using the built-in utilities or provided as custom paths to the examples.
-
 ## Evaluation Metrics
 
 ### Core Metrics
@@ -372,14 +389,10 @@ FDABench/
 │   ├── docetl_environment.yml  # DocETL environment setup
 │   ├── lotus_environment.yml   # Lotus environment setup
 │   └── palimpzest_environment.yml # Palimpzest environment setup
-├── sample/                      # Built-in sample data for testing
+├── sample/                      # Legacy sample data (deprecated)
 │   ├── sample_data.json        # Sample task configuration
 │   └── regional_sales/         # Sample database directory
 │       └── regional_sales.sqlite # Sample SQLite database
-├── dataset/                     # Full benchmark dataset (2,007 tasks)
-│   ├── test_singlechoice.json  # Single choice questions
-│   ├── test_multichoice.json   # Multiple choice questions  
-│   └── test_report.json        # Report generation tasks
 ├── results/                     # Test results and output files
 ├── environment.yml             # Conda environment specification
 ├── pyproject.toml              # Package configuration

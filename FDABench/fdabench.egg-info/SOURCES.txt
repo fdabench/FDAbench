@@ -2,7 +2,6 @@ LICENSE
 MANIFEST.in
 README.md
 pyproject.toml
-requirements.txt
 setup.py
 FDABench/__init__.py
 FDABench/agents/__init__.py
@@ -14,6 +13,9 @@ FDABench/core/__init__.py
 FDABench/core/base_agent.py
 FDABench/core/token_tracker.py
 FDABench/core/tool_registry.py
+FDABench/custom/__init__.py
+FDABench/custom/custom_agent.py
+FDABench/custom/custom_tool.py
 FDABench/evaluation/__init__.py
 FDABench/evaluation/evaluation_tools.py
 FDABench/examples/test_planning_agent_docetl_batch.py

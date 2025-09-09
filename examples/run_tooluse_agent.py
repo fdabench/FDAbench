@@ -2,8 +2,8 @@
 """
 Test script for the new refactored ToolUseAgent.
 
-This script tests the refactored package by processing the first task from test_report.json
-using the new clean package structure with tool-based execution.
+This script tests the refactored package by processing tasks from HuggingFace dataset
+FDAbench2026/Fdabench-Lite (report subset) using the new clean package structure with tool-based execution.
 """
 
 import os
@@ -103,7 +103,7 @@ def setup_tools(agent):
     logger.info(f"Registered {len(agent.list_tools())} tools: {agent.list_tools()}")
 
 
-def test_tooluse_agent(test_data=None, model=None):
+def test_tooluse_agent(test_data=None, model=None, index=0):
     """Test the new ToolUseAgent with the provided test data or default data"""
     
     logger.info("Testing New Refactored ToolUseAgent")
@@ -124,7 +124,7 @@ def test_tooluse_agent(test_data=None, model=None):
     # Load test data using common function or provided data
     try:
         if test_data is None:
-            test_data = load_test_data()
+            test_data = load_test_data(index=index)
         logger.info(f"Loaded test case: {test_data.get('task_id', 'unknown')} - {test_data.get('instance_id', 'unknown')}")
         logger.info(f"Database: {test_data.get('db', 'unknown')} ({test_data.get('database_type', 'unknown')})")
         logger.info(f"Question type: {test_data.get('question_type', 'unknown')}")
@@ -276,22 +276,16 @@ def test_tooluse_agent(test_data=None, model=None):
 
 def main():
     """Main function with command line argument support"""
-    parser = argparse.ArgumentParser(description='Test ToolUseAgent with optional input file')
-    parser.add_argument('--input', type=str, help='Input JSON file path')
+    parser = argparse.ArgumentParser(description='Test ToolUseAgent with HuggingFace dataset')
     parser.add_argument('--model', type=str, help='Model to use for the agent')
+    parser.add_argument('--index', type=int, default=0, help='Index of sample to process (default: 0)')
     args = parser.parse_args()
     
     try:
-        # Load test data from file if provided, otherwise use default
-        test_data = None
-        if args.input:
-            logger.info(f"Loading test data from: {args.input}")
-            with open(args.input, 'r', encoding='utf-8') as f:
-                test_data = json.load(f)
-        else:
-            logger.info("Using default test data")
+        # Load test data from HuggingFace
+        logger.info(f"Using HuggingFace dataset with index {args.index}")
         
-        result_data = test_tooluse_agent(test_data, args.model)
+        result_data = test_tooluse_agent(None, args.model, args.index)
         
         logger.info("Test completed successfully")
         

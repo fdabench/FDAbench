@@ -13,6 +13,7 @@ import pandas as pd
 import duckdb
 import numpy as np
 from typing import Dict, Any, List, Optional
+from datasets import load_dataset
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -73,37 +74,33 @@ def calculate_ehv_metric(
     return float(np.clip(ehv, 0.0, 1.0))
 
 
-def load_test_data(test_file_path: Optional[str] = None) -> Dict[str, Any]:
+def load_test_data(index: int = 0) -> Dict[str, Any]:
     """
-    Load the first task from test_report.json
+    Load test data from HuggingFace dataset
     
     Args:
-        test_file_path: Path to the test data file
+        index: Index of the sample to load (default: 0)
         
     Returns:
         Dict containing test data
         
     Raises:
-        FileNotFoundError: If test file doesn't exist
-        ValueError: If no test data found in file
+        ValueError: If index is out of range
     """
-    # Handle default path - find the correct relative path to sample data
-    if test_file_path is None:
-        # Get the directory where this script is located
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Go up to FDABench root directory and find sample data
-        project_root = os.path.dirname(os.path.dirname(current_dir))  # ../..
-        test_file_path = os.path.join(project_root, "sample", "sample_data.json")
+    # Load from HuggingFace
+    logger.info("Loading data from HuggingFace dataset FDAbench2026/Fdabench-Lite...")
+    ds = load_dataset("FDAbench2026/Fdabench-Lite", "report")
+    train_data = ds['train']
     
-    if not os.path.exists(test_file_path):
-        raise FileNotFoundError(f"Test file not found: {test_file_path}")
+    # Validate index
+    if index >= len(train_data):
+        raise ValueError(f"Index {index} out of range. Dataset has {len(train_data)} samples.")
     
-    with open(test_file_path, 'r', encoding='utf-8') as f:
-        first_line = f.readline().strip()
-        if first_line:
-            return json.loads(first_line)
+    # Get the specified sample
+    test_data = train_data[index]
+    logger.info(f"Loaded sample {index}/{len(train_data)}: {test_data.get('task_id', 'unknown')}")
     
-    raise ValueError("No test data found in file")
+    return test_data
 
 
 def generate_task_name(query_data: Dict[str, Any], pattern: str) -> str:

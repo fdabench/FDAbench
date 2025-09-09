@@ -13,6 +13,7 @@ import pandas as pd
 import duckdb
 import numpy as np
 from typing import Dict, Any, List, Optional
+from datasets import load_dataset
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -72,57 +73,48 @@ def calculate_ehv_metric(
     
     return float(np.clip(ehv, 0.0, 1.0))
 
-import os
-import json
-from typing import Dict, Any, List
-
 def load_test_data(
-    test_file_path: Optional[str] = None
+    subset: str = "report",
+    limit: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
-    Load all tasks from a JSONL test dataset.
+    Load all tasks from HuggingFace dataset for batch processing.
 
     Args:
-        test_file_path: Path to the JSONL test data file.
+        subset: Which subset to load from HuggingFace ("report", "single", "multiple")
+        limit: Optional limit on number of records to load (for testing)
 
     Returns:
-        A list containing all data records from the file.
+        A list containing all data records from the dataset.
 
     Raises:
-        FileNotFoundError: If the test file is not found.
-        ValueError: If no data is found in the file.
+        ValueError: If subset is invalid or no data is found.
     """
-    # Handle default path - find the correct relative path to sample data
-    if test_file_path is None:
-        # Get the directory where this script is located
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Go up to FDABench root directory and find sample data
-        project_root = os.path.dirname(os.path.dirname(current_dir))  # ../..
-        test_file_path = os.path.join(project_root, "sample", "sample_data.json")
+    # Load from HuggingFace dataset
+    logger.info(f"Loading data from HuggingFace dataset FDAbench2026/Fdabench-Lite (subset: {subset})...")
     
-    if not os.path.exists(test_file_path):
-        raise FileNotFoundError(f"Test file not found: {test_file_path}")
-
-    all_data = []
-
-    # Read the JSONL file line by line and load all data
-    with open(test_file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-                all_data.append(record)
-            except json.JSONDecodeError as e:
-                print(f"Skipping invalid JSON line: {e}")
-                continue
-
-    if not all_data:
-        raise ValueError(f"No data found in the file: {test_file_path}")
-
-    print(f"Loaded {len(all_data)} records from {test_file_path}")
-    return all_data
+    try:
+        ds = load_dataset("FDAbench2026/Fdabench-Lite", subset)
+        train_data = ds['train']
+        
+        # Convert to list of dicts
+        all_data = []
+        total_records = len(train_data)
+        
+        # Apply limit if specified
+        if limit is not None and limit > 0:
+            total_records = min(limit, total_records)
+            logger.info(f"Limiting to first {limit} records")
+        
+        for i in range(total_records):
+            all_data.append(train_data[i])
+        
+        logger.info(f"Loaded {len(all_data)} records from HuggingFace dataset (subset: {subset})")
+        return all_data
+        
+    except Exception as e:
+        logger.error(f"Failed to load dataset from HuggingFace: {e}")
+        raise ValueError(f"Could not load dataset subset '{subset}': {e}")
 
 
 def generate_task_name(query_data: Dict[str, Any], pattern: str) -> str:
