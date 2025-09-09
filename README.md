@@ -82,11 +82,28 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 echo "OPENROUTER_API_KEY=your-openrouter-api-key" >> .env
 ```
 
-## Quick Start
+## Quick Start 
 
-After completing the environment setup above, you can immediately start using FDABench:
+After completing the environment setup above, you can immediately start using FDABench with FDABench-Lite:
 
-### Dataset Loading
+### Database Download
+To download the FDABench-Lite related database files, please access the database file at this [link](https://drive.google.com/file/d/196XtE4HwVw3hy8ipGWrIPFJ94eUOt-Q_/view?usp=sharing). After downloading, please extract the database files to your desired directory.
+
+### Configure Database Paths
+
+Edit `FDABench/utils/database_connection_manager.py` and update the configuration:
+
+```python
+default_config = {
+    # SQLite database paths
+    'bird_db_path': "/your/path/to/databases",
+    'local_db_path': "/your/path/to/databases", 
+    'spider1_db_path': "/your/path/to/databases",
+    
+}
+```
+
+### Dataset Loading and Start
 
 **HuggingFace Dataset**: FDABench now loads data directly from the HuggingFace dataset hub. The dataset `FDAbench2026/Fdabench-Lite` contains 289 curated test cases in three tasks for immediate use. We also offer FDABench-Full with 2007 test cases on HuggingFace.
 
@@ -101,14 +118,14 @@ python examples/run_planning_agent.py
 python examples/run_planning_agent.py --index 10
 
 # Run with a custom model
-python examples/run_planning_agent.py --model "openai/gpt-4" --index 5
+python examples/run_planning_agent.py --model "openai/gpt-5" --index 5
 ```
 
-**Note**: The dataset will be automatically downloaded from HuggingFace on first use. If you want to run with local databases, need to follow the database configuration steps below:
+## FDABench-Full Usage
 
 ### Database Configuration
 
-FDABench supports multiple database types. You need to configure database paths and obtain required data:
+FDABench-Full supports multiple database types including Snowflake, Bigquery and SQLlite. You need to configure database paths and obtain required data:
 
 #### 1. SQLite Databases
 
@@ -211,7 +228,7 @@ python examples/run_tooluse_agent.py --index 100
 # --model "model_name": Specify the LLM model to use
 ```
 
-#### Data Agent with emantic Operator
+#### Data Agent with Semantic Operator
 
 Data agents integrated with semantic data operators for advanced data processing:
 
@@ -240,7 +257,7 @@ from FDABench.utils.test_utils import load_test_data
 
 # Initialize agent with your preferred model
 agent = PlanningAgent(
-    model="openai/gpt-4",  # or "deepseek/deepseek-chat-v3"
+    model="openai/gpt-5",  # or "deepseek/deepseek-chat-v3"
     api_key="your-api-key"
 )
 
@@ -267,7 +284,7 @@ All test results are automatically saved to:
 - `results/` - DuckDB files with test results and metrics
 - `FDABench/examples/data/` - Temporary processing files
 
-## Agent Integration
+## Other Data Agent Integration
 
 ### Adding a New Agent
 
@@ -277,7 +294,7 @@ To integrate a new DB agent, inherit from the `BaseAgent` class:
 from FDABench.core.base_agent import BaseAgent
 
 class YourCustomAgent(BaseAgent):
-    def __init__(self, model="openai/gpt-4", api_key=None, **kwargs):
+    def __init__(self, model="openai/gpt-5", api_key=None, **kwargs):
         super().__init__(model=model, api_key=api_key, **kwargs)
         # Initialize your agent-specific components
     
@@ -440,5 +457,3 @@ We welcome contributions to FDABench! Here's how you can help:
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
-
-**Note**: FDABench is designed to provide fair and comprehensive evaluation of database agents. The benchmark continues to evolve with new task types, databases, and evaluation metrics to keep pace with advancing agent technologies.
