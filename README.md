@@ -489,8 +489,18 @@ We welcome contributions to FDABench! Here's how you can help:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request with detailed description
 
-## License
+## Citation
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+If you find FDABench useful in your research, please consider citing our paper:
+```
+@article{wang2025fdabench,
+  title={FDABench: A Benchmark for Data Agents on Analytical Queries over Heterogeneous Data},
+  author={Wang, Ziting and Zhang, Shize and Yuan, Haitao and Zhu, Jinwei and Li, Shifu and Dong, Wei and Cong, Gao},
+  journal={arXiv preprint arXiv:2509.02473},
+  year={2025}
+}
+
+```
+
 
 ---
