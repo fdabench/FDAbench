@@ -87,7 +87,7 @@ echo "OPENROUTER_API_KEY=your-openrouter-api-key" >> .env
 After completing the environment setup above, you can immediately start using FDABench with FDABench-Lite:
 
 ### Database Download
-To download the FDABench-Lite related database files, please access the database file at this [link](https://drive.google.com/file/d/196XtE4HwVw3hy8ipGWrIPFJ94eUOt-Q_/view?usp=sharing). After downloading, please extract the database files to your desired directory.
+To download the FDABench-Lite related database files, please access the database file at this [link](https://drive.google.com/file/d/1Ae2XQ-3VvhDvqfCBbIbeyQeYim58GFp7/view?usp=sharing). After downloading, please extract the database files to your desired directory.
 
 ### Configure Database Paths
 
@@ -283,6 +283,43 @@ for i in range(5):
 All test results are automatically saved to:
 - `results/` - DuckDB files with test results and metrics
 - `FDABench/examples/data/` - Temporary processing files
+
+## Agent-Expert Dataset Generation
+
+### Start To Build Test Cases
+
+To generate new test cases using the agent-expert collaboration framework:
+
+```bash
+cd dataset_build/
+
+# Interactive mode (default) - with human expert review
+python main.py
+
+# Automatic mode - without human review  
+python main.py --auto
+
+# Set maximum revisions per item
+python main.py --max-revisions 5
+```
+
+### Code Structure
+
+```
+dataset_build/
+├── main.py              # Main dataset builder with human feedback support
+├── external_tools.py    # Smart tool selection (web/vector/file system)
+├── input_data/          # Source data and configurations
+│   ├── original_data/   # Original SQL queries (bird.jsonl)
+│   ├── gold_sql_result/ # Expected SQL execution results
+│   └── gold_sql_query/  # Gold SQL
+└── output_data/         # Generated test cases
+```
+
+The framework implements three-phase generation: (1) data initialization , (2) expert verification with accept/dispose/revise options, and (3) finalization.
+
+
+
 
 ## Other Data Agent Integration
 
