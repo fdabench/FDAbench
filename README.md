@@ -489,6 +489,23 @@ We welcome contributions to FDABench! Here's how you can help:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request with detailed description
 
+## Submission
+
+If you need to submit results, please submit them in JSONL format similar to `results/submission.jsonl` to **FDAbench2026@gmail.com**.
+
+Each line should contain a JSON object with the following key fields:
+- `task_id`, `instance_id`, `db`, `level`, `database_type`, `question_type`
+- For report tasks: `"generated_report": "your report content"`
+- For single choice: `"selected_answer": ["A"]`
+- For multiple choice: `"selected_answer": ["A", "C", "F"]`
+- Performance metrics: `tool_executed`, `latency`, `total_tokens`, `total_cost`, etc.
+
+Example format:
+```json
+{"task_id": "FDA0045", "question_type": "report", "generated_report": "...", "tool_executed": ["tool_1"], "latency": "", "total_tokens": ""}
+{"task_id": "FDA0803", "question_type": "single_choice", "selected_answer": ["D"], "tool_executed": ["tool_1"], "latency": "", "total_tokens": ""}
+```
+
 ## Citation
 
 If you find FDABench useful in your research, please consider citing our paper:

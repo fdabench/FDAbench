@@ -280,5 +280,5 @@ dependencies:
       - zipp==3.23.0
       - zstandard==0.23.0
 variables:
-  OPENROUTER_API_KEY: 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
-prefix: /home/ziting.wang/miniconda3/envs/lotus
+  OPENROUTER_API_KEY: key
+prefix: /path

@@ -1,9 +1,4 @@
-"""
-Test script for the new refactored PlanningAgent.
 
-This script tests the refactored package by processing tasks from HuggingFace dataset
-FDAbench2026/Fdabench-Lite (report subset) using the new clean package structure with planning-based execution.
-"""
 
 import os
 import sys
