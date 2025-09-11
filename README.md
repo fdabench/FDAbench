@@ -448,6 +448,8 @@ FDABench/
 │   └── regional_sales/         # Sample database directory
 │       └── regional_sales.sqlite # Sample SQLite database
 ├── results/                     # Test results and output files
+│   ├── *.duckdb                # DuckDB files with test results
+│   └── submission.jsonl        # Sample submission format
 ├── environment.yml             # Conda environment specification
 ├── pyproject.toml              # Package configuration
 ├── INSTALL.md                  # Detailed installation guide
@@ -473,13 +475,6 @@ We welcome contributions to FDABench! Here's how you can help:
 4. **Include usage examples** and documentation
 5. **Test with the evaluation suite** to ensure compatibility
 
-### Development Guidelines
-
-- Follow PEP 8 style guidelines
-- Add type hints for all public methods
-- Include docstrings with parameter descriptions
-- Write unit tests for new functionality
-- Update documentation for API changes
 
 ### Pull Request Process
 

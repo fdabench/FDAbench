@@ -102,7 +102,7 @@ class VectorSearchTool:
             logger.warning("VectorSearchManager not available")
     
     def execute(self, query: str, expected_query: str = None,
-                top_k: int = 5, domains: List[str] = None, **kwargs) -> Dict[str, Any]:
+                top_k: int = 5, **kwargs) -> Dict[str, Any]:
         """
         Perform vector database search.
         
@@ -110,7 +110,6 @@ class VectorSearchTool:
             query: Search query
             expected_query: Alternative query format
             top_k: Number of top results to return
-            domains: Specific domains to search in
             **kwargs: Additional parameters
             
         Returns:
@@ -121,22 +120,19 @@ class VectorSearchTool:
             if not search_query:
                 return {"status": "error", "error": "No search query provided"}
             
-            # Use custom vector search function if provided
             if self.vector_search_function:
                 try:
-                    results = self.vector_search_function(search_query, top_k, domains)
+                    results = self.vector_search_function(search_query, top_k)
                     return {
                         "status": "success", 
                         "results": results,
                         "query": search_query,
-                        "top_k": top_k,
-                        "domains": domains
+                        "top_k": top_k
                     }
                 except Exception as e:
                     logger.error(f"Custom vector search function failed: {e}")
                     return {"status": "error", "error": f"Custom vector search function failed: {str(e)}"}
             
-            # Use vector manager if available
             if self.vector_manager:
                 try:
                     results = self.vector_manager.search(search_query, top_k=top_k)
@@ -146,59 +142,30 @@ class VectorSearchTool:
                         "status": "success", 
                         "results": results,
                         "query": search_query,
-                        "top_k": top_k,
-                        "domains": domains
+                        "top_k": top_k
                     }
                 except Exception as e:
                     logger.error(f"Vector manager search failed: {e}")
                     return {"status": "error", "error": f"Vector manager search failed: {str(e)}"}
             
-            # Try to use base_agent vector search if available
             try:
-                # Import vector search functions from base_agent
-                from ..agents.base_agent import _search_single_domain, _get_domain_classification
+                from llama_index import VectorStoreIndex, StorageContext, load_index_from_storage
                 
-                # Get domain classification
-                if not domains:
-                    # Create a simple domain classifier
-                    if hasattr(self, '_get_domain_classification'):
-                        domain_string = self._get_domain_classification(search_query)
-                        domains = domain_string.split(";")[:3]  # Top 3 domains
-                    else:
-                        # Default domains
-                        domains = ["E-commerce", "Business Management", "Database_Data"]
+                storage_context = StorageContext.from_defaults(persist_dir="./storage")
+                index = load_index_from_storage(storage_context)
                 
-                # Search domains
-                all_responses = []
-                for domain in domains[:3]:  # Limit to 3 domains
-                    domain = domain.strip()
-                    if domain:
-                        response = _search_single_domain(domain, search_query)
-                        if response:
-                            all_responses.append(response)
+                query_engine = index.as_query_engine(similarity_top_k=top_k)
+                response = query_engine.query(search_query)
                 
-                if all_responses:
-                    results = "\n\n".join(all_responses)
-                    return {
-                        "status": "success",
-                        "results": results,
-                        "query": search_query,
-                        "top_k": top_k,
-                        "domains": domains,
-                        "searched_domains": len(all_responses)
-                    }
-                else:
-                    return {"status": "error", "error": "No relevant information found in vector database"}
-                
-            except ImportError:
-                logger.error("Base agent vector search functions not available")
-                return {"status": "error", "error": "Vector search functions not available"}
+                return {
+                    "status": "success",
+                    "results": str(response),
+                    "query": search_query,
+                    "top_k": top_k
+                }
             except Exception as e:
-                logger.error(f"Base agent vector search failed: {e}")
+                logger.error(f"LlamaIndex query failed: {e}")
                 return {"status": "error", "error": f"Vector search failed: {str(e)}"}
-            
-            # If no vector search method available, return error
-            return {"status": "error", "error": "No vector search functionality available"}
             
         except Exception as e:
             logger.error(f"Vector search failed: {str(e)}")

@@ -449,7 +449,6 @@ Next?"""
                 
                 step += 1
             
-            # === GENERATE 阶段：生成最终回答 ===
             with self.phase_timing('generate', 'final_response_generation'):
                 # Generate final response based on query type
                 if query.question_type == "multiple_choice":
@@ -504,10 +503,8 @@ Next?"""
                     "success_rate": len(self.tools_executed) / len(self.tools_attempted) if self.tools_attempted else 0,
                     "total_steps": step,
                     "token_summary": token_summary,
-                    # 添加四阶段统计
                     **self.get_phase_results()['phase_columns']
                 },
-                # 详细的阶段统计
                 "phase_statistics": self.get_phase_results()['phase_summary'],
                 "phase_distribution": self.get_phase_results()['phase_distribution'],
                 "processing_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time))

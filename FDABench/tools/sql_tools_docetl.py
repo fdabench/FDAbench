@@ -1,6 +1,3 @@
-"""
-Enhanced SQL-related tools with DocETL operator selection.
-"""
 
 import json
 import logging
@@ -16,21 +13,15 @@ import yaml
 logger = logging.getLogger(__name__)
 
 def extract_table_name_from_sql(sql_query: str) -> Optional[str]:
-    """
-    Extract the main table name from SQL query.
-    This is a simple implementation focusing on common patterns.
-    """
+
     try:
-        # Clean the SQL query
         sql_clean = re.sub(r'\s+', ' ', sql_query.strip().upper())
         
-        # Pattern to match FROM clause
         from_pattern = r'FROM\s+([^\s,\(\)]+)'
         match = re.search(from_pattern, sql_clean)
         
         if match:
             table_name = match.group(1).strip()
-            # Remove schema prefixes if any (e.g., schema.table -> table)
             if '.' in table_name:
                 table_name = table_name.split('.')[-1]
             return table_name.lower()
@@ -40,15 +31,10 @@ def extract_table_name_from_sql(sql_query: str) -> Optional[str]:
         logger.error(f"Error extracting table name: {e}")
         return None
 
-def estimate_tokens(text: str) -> int:
-    """Estimate token count (rough approximation: 1 token ~= 4 characters)"""
-    return max(1, len(text) // 4)
+        
+  
 
 def choose_docetl_operator_with_llm(natural_language_query: str, available_operators: List[str], api_key: str) -> tuple[str, dict]:
-    """
-    Use LLM to choose the most appropriate DocETL operator for the given query.
-    Returns: (operator_name, token_stats)
-    """
     token_stats = {
         'input_tokens': 0,
         'output_tokens': 0,
@@ -56,32 +42,28 @@ def choose_docetl_operator_with_llm(natural_language_query: str, available_opera
     }
     
     try:
-        # Available DocETL operators
         operators_to_consider = [op for op in available_operators if op in ["map", "filter"]]
         
         prompt = f"""
-Given the natural language query and available DocETL operators, choose the most appropriate operator.
+                Given the natural language query and available DocETL operators, choose the most appropriate operator.
 
-Natural Language Query: "{natural_language_query}"
+                Natural Language Query: "{natural_language_query}"
 
-Available DocETL Operators:
-- map: Transform data by adding new columns or extracting information from each row (use only for explicit data transformation requests)
-- filter: Filter rows based on conditions to keep only relevant data (use for analysis, queries, and data selection)
+                Available DocETL Operators:
+                - map: Transform data by adding new columns or extracting information from each row (use only for explicit data transformation requests)
+                - filter: Filter rows based on conditions to keep only relevant data (use for analysis, queries, and data selection)
 
-Guidelines:
-1. Use "filter" for all analytical queries, questions, and data exploration tasks
-2. Use "filter" for questions asking "what", "who", "how many", "which", "when", "where"
-3. Use "filter" for summarization, insights, comparisons, finding patterns, or selecting data
-4. Use "filter" for any query that involves examining, analyzing, or working with specific data
-5. Use "map" ONLY when explicitly asked to "add columns", "transform data", "create new fields", or "modify existing data structure"
+                Guidelines:
+                1. Use "filter" for all analytical queries, questions, and data exploration tasks
+                2. Use "filter" for questions asking "what", "who", "how many", "which", "when", "where"
+                3. Use "filter" for summarization, insights, comparisons, finding patterns, or selecting data
+                4. Use "filter" for any query that involves examining, analyzing, or working with specific data
+                5. Use "map" ONLY when explicitly asked to "add columns", "transform data", "create new fields", or "modify existing data structure"
 
-Return ONLY the operator name: either "map" or "filter". No explanation needed.
-"""
+                Return ONLY the operator name: either "map" or "filter". No explanation needed.
+                """
         
-        # Estimate input tokens
-        token_stats['input_tokens'] = estimate_tokens(prompt)
         
-        # Make OpenAI API call
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -105,7 +87,6 @@ Return ONLY the operator name: either "map" or "filter". No explanation needed.
             result = response.json()
             chosen_operator = result["choices"][0]["message"]["content"].strip().lower()
             
-            # Get actual usage from API response
             if 'usage' in result:
                 usage = result['usage']
                 token_stats['input_tokens'] = usage.get('prompt_tokens', token_stats['input_tokens'])
@@ -113,41 +94,36 @@ Return ONLY the operator name: either "map" or "filter". No explanation needed.
                 token_stats['total_tokens'] = usage.get('total_tokens', 
                     token_stats['input_tokens'] + token_stats['output_tokens'])
             else:
-                token_stats['output_tokens'] = estimate_tokens(chosen_operator)
-                token_stats['total_tokens'] = token_stats['input_tokens'] + token_stats['output_tokens']
+                logger.error("No usage data in API response")
+                token_stats['input_tokens'] = 0
+                token_stats['output_tokens'] = 0
+                token_stats['total_tokens'] = 0
                 
         else:
             logger.error(f"OpenAI API call failed with status {response.status_code}: {response.text}")
             chosen_operator = None
         
-        # Validate and return the chosen operator
         if chosen_operator and chosen_operator in operators_to_consider:
             return chosen_operator, token_stats
         else:
-            # Default fallback logic
             logger.warning(f"Invalid operator choice: {chosen_operator}, using fallback logic")
             query_lower = natural_language_query.lower()
             if any(word in query_lower for word in ["filter", "select only", "remove", "exclude", "show only"]):
                 return "filter", token_stats
             else:
-                return "map", token_stats  # Default for analysis
+                return "map", token_stats
                 
     except Exception as e:
         logger.error(f"Error choosing DocETL operator: {e}")
-        return "map", token_stats  # Default fallback
+        return "map", token_stats
 
 def apply_docetl_operator(df: pd.DataFrame, operator: str, natural_language_query: str, 
                          columns: List[str], api_key: str, token_tracker=None) -> pd.DataFrame:
-    """
-    Apply the chosen DocETL operator to the DataFrame using DocETL pipeline.
-    """
     try:
-        # Get the number of data rows for tracking LLM calls
         data_rows_count = len(df)
         
-        # Create temporary files for DocETL pipeline
+        # Token counts will be tracked from actual API calls        
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as data_file:
-            # Convert DataFrame to JSON for DocETL
             data_json = df.to_dict('records')
             json.dump(data_json, data_file, indent=2)
             data_file_path = data_file.name
@@ -158,9 +134,7 @@ def apply_docetl_operator(df: pd.DataFrame, operator: str, natural_language_quer
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as pipeline_file:
             pipeline_file_path = pipeline_file.name
         
-        # Create DocETL pipeline configuration
         if operator == "map":
-            # Map operation - analyze/transform data
             config = {
                 "datasets": {
                     "input_data": {
@@ -206,7 +180,6 @@ Return your response as a clear, concise answer.
             }
         
         elif operator == "filter":
-            # Filter operation - select relevant rows
             config = {
                 "datasets": {
                     "input_data": {
@@ -249,64 +222,33 @@ Return false if this record should be filtered out or doesn't match the criteria
                 }
             }
         
-        # Save pipeline configuration
         with open(pipeline_file_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
         
-        # Set API key environment variable
         os.environ['OPENROUTER_API_KEY'] = api_key
         
-        # Run DocETL pipeline
         logger.info(f"Running DocETL {operator} operation...")
         runner = DSLRunner.from_yaml(pipeline_file_path)
         runner.load_run_save()
         
-        # Load results
         with open(output_file_path, 'r') as f:
             results = json.load(f)
         
-        # Convert results back to DataFrame
         if results:
             result_df = pd.DataFrame(results)
             logger.info(f"DocETL {operator} operation completed successfully. Results shape: {result_df.shape}")
-            
-            # Track LLM calls - one for each data row processed by DocETL
-            if token_tracker:
-                for i in range(data_rows_count):
-                    token_tracker.track_call(
-                        category=f"docetl_{operator}_row_{i+1}",
-                        input_tokens=100,  # estimated tokens per row for DocETL processing
-                        output_tokens=50,  # estimated tokens per row for DocETL processing
-                        model="deepseek/deepseek-chat-v3-0324",
-                        cost=None
-                    )
-                logger.info(f"Tracked {data_rows_count} docetl {operator} operations (one per data row)")
-            
             return result_df
         else:
             logger.warning(f"DocETL {operator} operation returned no results")
             
-            # Still track the processing attempts even if no results
-            if token_tracker:
-                for i in range(data_rows_count):
-                    token_tracker.track_call(
-                        category=f"docetl_{operator}_empty_row_{i+1}",
-                        input_tokens=100,  # estimated tokens per row
-                        output_tokens=10,  # minimal output for empty results
-                        model="deepseek/deepseek-chat-v3-0324",
-                        cost=None
-                    )
-                logger.info(f"Tracked {data_rows_count} docetl {operator} operations (empty results, one per data row)")
             
             return pd.DataFrame()
             
     except Exception as e:
         logger.error(f"Error applying DocETL {operator} operator: {e}")
-        # Return original DataFrame if DocETL operation fails
         return df
     
     finally:
-        # Clean up temporary files
         for temp_path in [data_file_path, output_file_path, pipeline_file_path]:
             try:
                 if os.path.exists(temp_path):
@@ -315,36 +257,18 @@ Return false if this record should be filtered out or doesn't match the criteria
                 logger.warning(f"Could not clean up temp file {temp_path}: {e}")
 
 
-
 class SQLExecutionTool:
-    """Enhanced tool for executing SQL queries with DocETL operator selection"""
     
     def __init__(self, db_manager=None, token_tracker=None):
         self.db_manager = db_manager
-        self.token_tracker = token_tracker
         self.available_operators = ["map", "filter"]
     
     def execute(self, sql_query: str = None, database_name: str = None,
                 database_type: str = None, instance_id: str = None,
                 natural_language_query: str = None, previous_results: Dict = None,
                 **kwargs) -> Dict[str, Any]:
-        """
-        Execute SQL query on database with enhanced DocETL operator selection.
-        
-        Args:
-            sql_query: SQL query to execute
-            database_name: Target database
-            database_type: Type of database (bird, spider2-lite, etc.)
-            instance_id: Instance identifier for database connection
-            natural_language_query: Original query (for DocETL processing)
-            previous_results: Results from previous tools
-            **kwargs: Additional parameters
-            
-        Returns:
-            Dictionary with status and results
-        """
+      
         try:
-            # If no SQL provided, try to get from previous results
             if not sql_query and previous_results:
                 for tool_name in ["sql_generate", "generated_sql"]:
                     if tool_name in previous_results:
@@ -356,26 +280,19 @@ class SQLExecutionTool:
             if not sql_query:
                 return {"status": "error", "error": "No SQL query provided"}
             
-               # ENHANCEMENT 1: Extract table name and modify SQL to get whole table
             table_name = extract_table_name_from_sql(sql_query)
             if table_name:
-                # Replace the complex SQL with simple SELECT * FROM table
                 modified_sql = f"SELECT * FROM {table_name}"
                 logger.info(f"Modified SQL from complex query to: {modified_sql}")
                 sql_to_execute = modified_sql
             else:
                 sql_to_execute = sql_query
-            
 
-
-            # Use database manager for SQL execution
             if self.db_manager and database_name and database_type:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -384,7 +301,6 @@ class SQLExecutionTool:
                             db_name: str
                             connection_params: Dict[str, Any] = None
                     
-                    # Get database configuration
                     if hasattr(self.db_manager, 'get_database_config') and instance_id:
                         config = self.db_manager.get_database_config(instance_id, database_name, database_type)
                     else:
@@ -394,20 +310,16 @@ class SQLExecutionTool:
                             db_name=database_name
                         )
                     
-                    # Execute SQL using database manager
                     execution_result = self.db_manager.execute_sql(config, sql_to_execute)
                     
                     if execution_result["status"] == "success":
-                        # Apply intelligent DocETL operator selection
                         if natural_language_query:
                             try:
-                                # Check API key availability
                                 api_key = os.environ.get('OPENROUTER_API_KEY')
                                 if not api_key:
                                     logger.error("OPENROUTER_API_KEY not found, DocETL processing will fail")
                                     raise ValueError("Missing OPENROUTER_API_KEY")
 
-                                # Convert execution_result to pandas DataFrame
                                 query_results = execution_result["results"]["query_results"]
                                 columns = execution_result["results"].get("columns", [])
                                 
@@ -415,46 +327,17 @@ class SQLExecutionTool:
                                     df = pd.DataFrame(query_results, columns=columns)
                                     logger.info(f"Created DataFrame with shape: {df.shape}")
                                     
-                                    # Choose the right DocETL operator using LLM
-                                    chosen_operator, tokens_choose_operator = choose_docetl_operator_with_llm(
+                                    chosen_operator = choose_docetl_operator_with_llm(
                                         natural_language_query, 
                                         self.available_operators, 
                                         api_key
                                     )
                                     
-                                    # Track the operator choice LLM call
-                                    if self.token_tracker:
-                                        self.token_tracker.track_call(
-                                            category=f"docetl_operator_choice",
-                                            input_tokens=tokens_choose_operator['input_tokens'],
-                                            output_tokens=tokens_choose_operator['output_tokens'],
-                                            model="deepseek/deepseek-chat-v3-0324",
-                                            cost=None
-                                        )
-                                    
                                     logger.info(f"LLM chose DocETL operator: {chosen_operator}")
-                                    logger.info(f"Operator choice tokens: {tokens_choose_operator}")
                                     
-                                    # Apply the chosen DocETL operator
                                     processed_df = apply_docetl_operator(
-                                        df, chosen_operator, natural_language_query, columns, api_key, self.token_tracker
+                                        df, chosen_operator, natural_language_query, columns, api_key
                                     )
-                                    
-                                    # Track DocETL operation (estimate tokens based on data size)
-                                    if self.token_tracker:
-                                        input_text = natural_language_query + str(df.to_string())
-                                        estimated_input_tokens = estimate_tokens(input_text)
-                                        estimated_output_tokens = estimate_tokens(str(processed_df.to_string()))
-                                        
-                                        self.token_tracker.track_call(
-                                            category=f"docetl_{chosen_operator}",
-                                            input_tokens=estimated_input_tokens,
-                                            output_tokens=estimated_output_tokens,
-                                            model="deepseek/deepseek-chat-v3-0324",
-                                            cost=None
-                                        )
-                                    
-                                    # Convert back to the expected format
                                     if isinstance(processed_df, pd.DataFrame):
                                         processed_results = processed_df.to_dict('records')
                                     else:
@@ -483,7 +366,6 @@ class SQLExecutionTool:
                                         
                             except Exception as e:
                                 logger.error(f"DocETL processing failed, returning original results: {e}")
-                                # Fall back to original results if DocETL processing fails
                     
                     if execution_result["status"] == "success":
                         table_name = extract_table_name_from_sql(sql_query)
@@ -515,7 +397,6 @@ class SQLExecutionTool:
                         "error": f"Database execution failed: {str(e)}"
                     }
             
-            # If required parameters are missing, return error
             error_msg = "SQL execution failed due to missing parameters"
             if not self.db_manager:
                 error_msg = "Database manager is not available for SQL execution"
@@ -534,12 +415,7 @@ class SQLExecutionTool:
             logger.error(f"SQL execution failed: {str(e)}")
             return {"status": "error", "error": str(e)}
 
-
-
-# Keep the other classes from the original file unchanged
-
 class SQLGenerationTool:
-    """Tool for generating SQL queries from natural language"""
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -566,14 +442,11 @@ class SQLGenerationTool:
             if not natural_language_query:
                 return {"status": "error", "error": "No natural language query provided"}
             
-            # Get schema info from database manager if available and not provided
             if not schema_info and self.db_manager and database_name:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -583,7 +456,6 @@ class SQLGenerationTool:
                             connection_params: Dict[str, Any] = None
                     
                     if database_type and instance_id:
-                        # Use get_database_config to get proper connection params
                         if hasattr(self.db_manager, 'get_database_config'):
                             config = self.db_manager.get_database_config(instance_id, database_name, database_type)
                         else:
@@ -598,7 +470,6 @@ class SQLGenerationTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info: {e}")
             
-            # Build prompt for SQL generation
             prompt_parts = [
                 f'Given the following database schema for the {database_type or "unknown"} database "{database_name}":',
                 ''
@@ -634,7 +505,6 @@ class SQLGenerationTool:
             
             prompt = "\n".join(prompt_parts)
             
-            # Use LLM client if available, otherwise return error
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     generated_sql = self.llm_client.call_llm(
@@ -654,7 +524,6 @@ class SQLGenerationTool:
             else:
                 return {"status": "error", "error": "LLM client not available or does not have call_llm method"}
             
-            # Validate that we actually generated meaningful SQL
             if not mock_sql or mock_sql.strip() == "" or "ERROR" in mock_sql.upper():
                 return {"status": "error", "error": "Failed to generate valid SQL query"}
             
@@ -677,7 +546,6 @@ class SQLGenerationTool:
 
 
 class SQLOptimizationTool:
-    """Tool for optimizing SQL queries"""
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -686,19 +554,15 @@ class SQLOptimizationTool:
     def execute(self, sql_query: str, db_name: str = None, 
                 database_type: str = None, instance_id: str = None,
                 schema_info: Dict = None, **kwargs) -> Dict[str, Any]:
-        # ... (keeping the original implementation)
         try:
             if not sql_query:
                 return {"status": "error", "error": "No SQL query provided"}
             
-            # Get schema info if not provided
             if not schema_info and self.db_manager and db_name and database_type:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -721,7 +585,6 @@ class SQLOptimizationTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info for optimization: {e}")
             
-            # Use LLM for optimization if available
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     prompt = f"""
@@ -774,7 +637,6 @@ Return ONLY the optimized SQL query. If no optimization is possible, return the 
 
 
 class SQLDebugTool:
-    """Tool for debugging SQL queries"""
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -784,19 +646,15 @@ class SQLDebugTool:
                 database_type: str = None, instance_id: str = None,
                 natural_language_query: str = None, schema_info: Dict = None,
                 **kwargs) -> Dict[str, Any]:
-        # ... (keeping the original implementation from the original file)
         try:
             if not failed_sql:
                 return {"status": "error", "error": "No SQL query provided for debugging"}
             
-            # Get schema info if not provided
             if not schema_info and self.db_manager and database_name and database_type:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -819,7 +677,6 @@ class SQLDebugTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info for debugging: {e}")
             
-            # Use LLM for debugging if available
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     prompt = f"""
@@ -859,7 +716,6 @@ Return ONLY the corrected SQL query. If you cannot fix the query, return "QUERY_
                             "error": "Unable to fix the SQL query based on the error message"
                         }
                     
-                    # Try to execute the corrected SQL if db_manager is available
                     if self.db_manager and database_name and database_type:
                         try:
                             execution_tool = SQLExecutionTool(self.db_manager)

@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Subtask:
-    """Class for representing a subtask"""
     subtask_id: str
     tool: str
     input: Dict[str, Any]
@@ -32,14 +31,11 @@ class Subtask:
 
 @dataclass 
 class Query:
-    """Flexible Query class that can handle additional fields from test data"""
     instance_id: str
     db: str
     database_type: str
     tools_available: List[str]
     gold_subtasks: List[Subtask]
-    
-    # Optional fields with defaults
     query: str = ""
     advanced_query: str = ""
     original_query: str = ""
@@ -47,8 +43,6 @@ class Query:
     multiple_choice_questions: List[Dict[str, Any]] = None
     level: str = ""
     question_type: str = ""
-    
-    # Single choice question related fields
     options: Dict[str, str] = None
     correct_answer: List[str] = None
     explanation: str = ""
@@ -63,11 +57,9 @@ class Query:
         if self.correct_answer is None:
             self.correct_answer = []
         
-        # Use query as advanced_query if advanced_query is empty
         if not self.advanced_query and self.query:
             self.advanced_query = self.query
         
-        # Use query as original_query if original_query is empty
         if not self.original_query and self.query:
             self.original_query = self.query
 
@@ -99,11 +91,9 @@ class BaseAgent:
         self.api_base = api_base
         self.api_key = api_key
         
-        # Initialize core components
         self.token_tracker = TokenTracker()
         self.tool_registry = ToolRegistry()
         
-        # Initialize database manager for SQL operations
         try:
             from ..utils.database_connection_manager import DatabaseConnectionManager
             self.db_manager = DatabaseConnectionManager()
@@ -112,35 +102,28 @@ class BaseAgent:
             logger.warning(f"Could not initialize DatabaseConnectionManager: {e}")
             self.db_manager = None
         
-        # State tracking
         self.tool_results = {}
         self.completed_subtasks = set()
         self.context_history = []
         self.max_history_length = 10
         
-        # Phase tracking
         self.phase_operation_counts = {
             'decision': 0, 'execute': 0, 'retry': 0, 'generate': 0
         }
         
-        # Performance optimization caches
         self._llm_cache = {}
         self._sql_cache = {}
         self._vector_cache = {}
-        self._domain_cache = {}
         self._schema_cache = {}
         
-        # Setup API client
         self._setup_api_client()
         
-        # Initialize basic tools
         self._register_basic_tools()
         
         logger.info(f"Initialized BaseAgent with model: {model}")
     
     def _setup_api_client(self):
         """Set up API client based on configuration."""
-        # Use provided API key or fallback to environment variables
         if not self.api_key:
             if "openrouter.ai" in self.api_base:
                 self.api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -149,7 +132,6 @@ class BaseAgent:
             else:
                 self.api_key = os.environ.get("CUSTOM_API_KEY")
         
-        # Initialize OpenAI-compatible client
         self.client = OpenAI(
             base_url=self.api_base,
             api_key=self.api_key
@@ -158,7 +140,6 @@ class BaseAgent:
     def _register_basic_tools(self):
         """Register basic tools that all agents can use."""
         try:
-            # Import and register SQL tools
             from ..tools.sql_tools import SQLGenerationTool, SQLExecutionTool, SQLOptimizationTool, SQLDebugTool
             from ..tools.schema_tools import SchemaInspectionTool
             from ..tools.search_tools import WebSearchTool, VectorSearchTool
@@ -166,25 +147,20 @@ class BaseAgent:
             from ..tools.context_tools import ContextHistoryTool
             from ..tools.optimization_tools import QueryOptimizationTool, PerformanceTool
             
-            # Register SQL tools
             self.register_tool("generated_sql", SQLGenerationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Generate SQL queries from natural language")
             self.register_tool("execute_sql", SQLExecutionTool(db_manager=self.db_manager), category="sql", description="Execute SQL queries against databases")
             self.register_tool("sql_optimize", SQLOptimizationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Optimize SQL queries for better performance")
             self.register_tool("sql_debug", SQLDebugTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Debug and fix SQL query issues")
             
-            # Register schema tools
             self.register_tool("get_schema_info", SchemaInspectionTool(), category="schema", description="Get database schema information")
             self.register_tool("schema_understanding", SchemaInspectionTool(), category="schema", description="Understand database structure")
             
-            # Register search tools
             self.register_tool("web_context_search", WebSearchTool(api_key=self.api_key), category="search", description="Search web for context information")
             self.register_tool("vectorDB_search", VectorSearchTool(), category="search", description="Search vector database for similar content")
             
-            # Register file tools
             self.register_tool("file_system_search", FileSystemSearchTool(), category="file", description="Search file system for relevant files")
             self.register_tool("context_history", ContextHistoryTool(), category="context", description="Manage conversation context and history")
             
-            # Register optimization tools
             self.register_tool("query_optimize", QueryOptimizationTool(), category="optimization", description="Optimize database queries")
             self.register_tool("performance_analyze", PerformanceTool(), category="optimization", description="Analyze query performance")
             
@@ -195,76 +171,6 @@ class BaseAgent:
         except Exception as e:
             logger.error(f"Error registering tools: {e}")
     
-    def estimate_tokens(self, text: str, model: Optional[str] = None) -> int:
-        """
-        Estimate token count using proper tokenization.
-        
-        Args:
-            text: Text to estimate tokens for
-            model: Model name for tokenizer selection
-            
-        Returns:
-            Estimated token count
-        """
-        if not text:
-            return 0
-            
-        try:
-            # Try to use tiktoken for OpenAI-compatible models
-            import tiktoken
-            
-            # Select encoding based on model
-            model_name = model or self.model
-            if "gpt-4" in model_name.lower():
-                encoding = tiktoken.encoding_for_model("gpt-4")
-            elif "gpt-3.5" in model_name.lower():
-                encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            else:
-                # Use cl100k_base for most modern models
-                encoding = tiktoken.get_encoding("cl100k_base")
-            
-            return len(encoding.encode(text))
-            
-        except ImportError:
-            # Fallback 1: Use transformers tokenizer if available
-            try:
-                from transformers import AutoTokenizer
-                
-                # Use a general tokenizer for estimation
-                tokenizer = AutoTokenizer.from_pretrained("gpt2")
-                return len(tokenizer.encode(text, add_special_tokens=False))
-                
-            except (ImportError, Exception):
-                # Fallback 2: Improved character-based estimation
-                # Based on empirical analysis of various tokenizers
-                # Adjust ratio based on text characteristics
-                
-                # Basic character count
-                char_count = len(text)
-                
-                # Apply heuristics for better estimation
-                # - Longer words have better char:token ratio
-                # - Code/technical text has worse ratio
-                # - Natural language has better ratio
-                
-                words = text.split()
-                if not words:
-                    return max(1, char_count // 4)
-                
-                avg_word_length = char_count / len(words)
-                
-                if avg_word_length > 8:  # Likely technical/code content
-                    ratio = 3.2  # Worse char:token ratio
-                elif avg_word_length < 4:  # Short words
-                    ratio = 3.8
-                else:  # Normal text
-                    ratio = 4.0
-                
-                return max(1, int(char_count / ratio))
-        
-        except Exception as e:
-            logger.warning(f"Token estimation failed: {e}, using fallback")
-            return max(1, len(text) // 4)
     
     def call_llm(self, messages: List[Dict[str, str]], model: Optional[str] = None, 
                  category: str = "general", phase: Optional[str] = None) -> str:
@@ -281,14 +187,11 @@ class BaseAgent:
         """
         model = model or self.model
         
-        # Create cache key
         input_text = " ".join([msg.get("content", "") for msg in messages])
         cache_key = f"{model}:{category}:{hash(input_text)}"
         
-        # Check cache first
         if cache_key in self._llm_cache:
             cached_result = self._llm_cache[cache_key]
-            # Track cached call for statistics
             self.token_tracker.track_call(
                 category, 
                 cached_result['input_tokens'], 
@@ -299,11 +202,7 @@ class BaseAgent:
             )
             return cached_result['response']
         
-        # Estimate input tokens
-        input_tokens = self.estimate_tokens(input_text)
-        
         try:
-            # Make API call
             completion = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -316,23 +215,18 @@ class BaseAgent:
             
             response = completion.choices[0].message.content
             
-            # Get actual usage from response if available
             usage = getattr(completion, 'usage', None)
             if usage:
-                actual_input_tokens = getattr(usage, 'prompt_tokens', input_tokens)
-                actual_output_tokens = getattr(usage, 'completion_tokens', self.estimate_tokens(response, model))
+                actual_input_tokens = getattr(usage, 'prompt_tokens', 0)
+                actual_output_tokens = getattr(usage, 'completion_tokens', 0)
             else:
-                # Estimate both input and output tokens properly when API doesn't provide usage
-                actual_input_tokens = self.estimate_tokens(input_text, model)
-                actual_output_tokens = self.estimate_tokens(response, model)
+                logger.error(f"No usage data in API response for model {model}")
+                raise ValueError(f"API response does not contain token usage data for model {model}")
             
-            # Get cost from response if available
             cost = getattr(completion, 'cost', None)
             
-            # Track token usage
             self.token_tracker.track_call(category, actual_input_tokens, actual_output_tokens, model, cost, phase)
             
-            # Cache the result
             self._llm_cache[cache_key] = {
                 'response': response,
                 'input_tokens': actual_input_tokens,
@@ -340,7 +234,6 @@ class BaseAgent:
                 'cost': cost
             }
             
-            # Limit cache size
             if len(self._llm_cache) > 1000:
                 keys_to_remove = list(self._llm_cache.keys())[:100]
                 for key in keys_to_remove:
@@ -350,8 +243,7 @@ class BaseAgent:
             
         except Exception as e:
             logger.error(f"LLM call failed: {str(e)}")
-            # Track failed call
-            self.token_tracker.track_call(category, input_tokens, 0, model, 0.0, phase)
+            self.token_tracker.track_call(category, 0, 0, model, 0.0, phase)
             raise e
     
     def register_tool(self, name: str, tool: Any, **metadata):
@@ -428,7 +320,6 @@ class BaseAgent:
         phase_summary = self.token_tracker.get_phase_summary()
         phase_columns = self.token_tracker.get_phase_database_columns()
         
-        # Calculate totals
         total_latency = sum(stats['latency_seconds'] for stats in phase_summary.values())
         total_tokens = sum(stats['total_tokens'] for stats in phase_summary.values())
         total_cost = sum(stats['cost'] for stats in phase_summary.values())
@@ -452,127 +343,11 @@ class BaseAgent:
         self.tool_results.clear()
         self.completed_subtasks.clear()
         self.context_history.clear()
-        # Reset phase tracking for new query
         self.phase_operation_counts = {'decision': 0, 'execute': 0, 'retry': 0, 'generate': 0}
-        # Note: We don't reset token tracker as we want to track across queries
     
     def cleanup(self):
         """Cleanup resources."""
         self._llm_cache.clear()
         self._sql_cache.clear()
         self._vector_cache.clear()
-        self._domain_cache.clear()
         self._schema_cache.clear()
-
-    def _get_domain_classification(self, query: str) -> str:
-        """
-        Get domain classification for the query.
-        
-        Args:
-            query: Search query string
-            
-        Returns:
-            Comma-separated domain string
-        """
-        # Define domain categories
-        DOMAINS = [
-            "Healthcare_Medical Systems", "Sports_Competition", "Transportation_Aviation", "Education Institution",
-            "E commerce", "Government_Public Administration", "Weather_Environmental", "Software Development",
-            "Genomics_Bioinformatics", "Estate_Property", "Music", "Telecommunications", "Food_Beverage Industry",
-            "Manufacturing_Production", "Blockchain", "Social Media", "Geographic", "Database_Data",
-            "Urban Planning", "Agriculture_Farming", "Marketing_Advertising", "Human Resources", "Energy_Utilities",
-            "Culture", "Business Management", "Automotive Industry", "Pet Services", "Marine_Shipping",
-            "Events_Planning", "Natural Language Processing", "Customer Relationship", "Scientific Research",
-            "Political Science_Voting", "Document Management", "Finance_Investment", "Travel_Tourism",
-            "Security Enforcement", "Supply Chain", "Gaming_Entertainment", "International Development",
-            "Movie_Animation", "Philanthropy", "Books", "Trading", "Law_Legal", "Computer Vision",
-            "Arts", "Psychology", "Material Science", "Applied Sciences"
-        ]
-        
-        prompt = f"""Given the following query, classify it into one or more domains from this list:
-{chr(10).join([f"{i + 1}. {domain}" for i, domain in enumerate(DOMAINS)])}
-
-Query: {query}
-
-Return exactly three most relevant domain names separated by semicolons. Example: "Trading; Finance_Investment; E-commerce".
-Do not include any other text, only return the three domain names separated by semicolons."""
-
-        try:
-            response = self.call_llm([{"role": "user", "content": prompt}], category="domain_classification")
-            domains = response.strip()
-            
-            # Clean up response if it doesn't match expected format
-            if ";" not in domains:
-                # Try to extract domain names from response
-                found_domains = []
-                for domain in DOMAINS:
-                    if domain in domains:
-                        found_domains.append(domain)
-                        if len(found_domains) == 3:
-                            break
-
-                if len(found_domains) == 3:
-                    domains = "; ".join(found_domains)
-                else:
-                    # Use default values if unable to extract three domains
-                    domains = "E-commerce; Business Management; Customer Relationship"
-
-            return domains
-        except Exception as e:
-            logger.error(f"Domain classification failed: {e}")
-            # Return default domains on error
-            return "E-commerce; Business Management; Database_Data"
-
-    def _search_single_domain(self, domain: str, query: str) -> Optional[str]:
-        """
-        Search within a single domain.
-        
-        Args:
-            domain: Domain to search in
-            query: Search query
-            
-        Returns:
-            Search results as string or None
-        """
-        try:
-            # Simple mock search based on domain and query
-            query_lower = query.lower()
-            
-            if domain == "E-commerce":
-                if any(word in query_lower for word in ['product', 'order', 'customer', 'sales', 'purchase', 'buy', 'shop']):
-                    return f"E-commerce domain: Found relevant information about {query}. This domain contains product catalogs, customer orders, and sales data."
-            
-            elif domain == "Business Management":
-                if any(word in query_lower for word in ['business', 'management', 'company', 'organization', 'enterprise']):
-                    return f"Business Management domain: Found relevant information about {query}. This domain contains organizational data, management processes, and business operations."
-            
-            elif domain == "Database_Data":
-                if any(word in query_lower for word in ['database', 'data', 'table', 'query', 'sql', 'schema']):
-                    return f"Database_Data domain: Found relevant information about {query}. This domain contains database schemas, data models, and query patterns."
-            
-            elif domain == "Analytics":
-                if any(word in query_lower for word in ['analytics', 'report', 'metrics', 'kpi', 'dashboard']):
-                    return f"Analytics domain: Found relevant information about {query}. This domain contains reporting data, metrics, and analytical insights."
-            
-            elif domain == "Financial":
-                if any(word in query_lower for word in ['financial', 'finance', 'money', 'budget', 'cost', 'revenue']):
-                    return f"Financial domain: Found relevant information about {query}. This domain contains financial data, budgets, and monetary information."
-            
-            elif domain == "Healthcare_Medical Systems":
-                if any(word in query_lower for word in ['health', 'medical', 'patient', 'hospital', 'doctor', 'treatment']):
-                    return f"Healthcare_Medical Systems domain: Found relevant information about {query}. This domain contains medical data, patient records, and healthcare information."
-            
-            elif domain == "Software Development":
-                if any(word in query_lower for word in ['software', 'development', 'programming', 'code', 'application', 'system']):
-                    return f"Software Development domain: Found relevant information about {query}. This domain contains software projects, development processes, and technical documentation."
-            
-            elif domain == "Marketing_Advertising":
-                if any(word in query_lower for word in ['marketing', 'advertising', 'campaign', 'promotion', 'brand', 'customer']):
-                    return f"Marketing_Advertising domain: Found relevant information about {query}. This domain contains marketing campaigns, advertising data, and customer engagement metrics."
-            
-            # Default response for any domain
-            return f"{domain} domain: Found general information related to {query}. This domain may contain relevant context for your query."
-            
-        except Exception as e:
-            logger.error(f"Error searching domain {domain}: {e}")
-            return None

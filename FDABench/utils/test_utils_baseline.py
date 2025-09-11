@@ -19,60 +19,6 @@ from datasets import load_dataset
 logger = logging.getLogger(__name__)
 
 
-def calculate_ehv_metric(
-    evaluation_scores: Dict[str, float],
-    total_cost: float,
-    alpha: float = 1.0,
-    beta: float = 1.0,
-    q0: float = 0.6,
-    e0: float = 0.0
-) -> float:
-    """
-    Calculate the normalized Expected HyperVolume (n-EHV) metric for a single query.
-    
-    Args:
-        evaluation_scores: Dictionary containing rouge1, f1, precision, recall scores
-        total_cost: Total cost of the query execution
-        alpha: Exponent for efficiency importance (default: 1.0)
-        beta: Exponent for quality importance (default: 1.0)  
-        q0: Minimum acceptable quality threshold (default: 0.6)
-        e0: Minimum acceptable efficiency threshold (default: 0.0)
-        
-    Returns:
-        float: EHV score in range [0, 1]
-    """
-    # Calculate composite quality score from evaluation metrics
-    # Weight ROUGE-1 (40%), F1 (40%), Precision (10%), Recall (10%)
-    rouge1 = evaluation_scores.get('rouge1', 0.0)
-    f1 = evaluation_scores.get('f1', 0.0)
-    precision = evaluation_scores.get('precision', 0.0)
-    recall = evaluation_scores.get('recall', 0.0)
-    
-    quality_score = 0.4 * rouge1 + 0.4 * f1 + 0.1 * precision + 0.1 * recall
-    quality_score = np.clip(quality_score, 0.0, 1.0)
-    
-    # Calculate efficiency (E = 1 / cost)
-    if total_cost <= 0:
-        efficiency = 1.0  # Free queries get maximum efficiency
-    else:
-        efficiency = 1.0 / total_cost
-    
-    # Apply reference point thresholds
-    if quality_score <= q0 or efficiency <= e0:
-        return 0.0  # Clip-to-zero enforcement
-    
-    # Calculate normalized factors (simplified for single query)
-    # For single query, we use reasonable max values
-    e_max = 100.0  # Assume max efficiency of 100 (cost = 0.01)
-    
-    e_normalized = ((efficiency - e0) / (e_max - e0)) ** alpha
-    q_normalized = ((quality_score - q0) / (1.0 - q0)) ** beta
-    
-    # EHV score is the product of normalized factors
-    ehv = e_normalized * q_normalized
-    
-    return float(np.clip(ehv, 0.0, 1.0))
-
 def load_test_data(
     subset: str = "report",
     limit: Optional[int] = None
@@ -243,9 +189,6 @@ def create_query_row(
         
         # LLM Judge score
         'llm_judge_score': evaluation_scores.get('llm_judge_score', 0.0),
-        
-        # EHV metric
-        'ehv': evaluation_scores.get('ehv', 0.0),
         
         # Evaluation metadata
         'evaluation_time_seconds': evaluation_scores.get('evaluation_time', 0),
@@ -513,50 +456,7 @@ def evaluate_agent_result(
     # Add evaluation time to scores
     evaluation_scores['evaluation_time'] = evaluation_time
     
-    # Calculate EHV metric if we have both evaluation scores and cost information
-    if evaluation_scores and result.get('metrics', {}).get('cost', {}).get('total_cost') is not None:
-        total_cost = result['metrics']['cost']['total_cost']
-        try:
-            ehv_score = calculate_ehv_metric(evaluation_scores, total_cost)
-            evaluation_scores['ehv'] = ehv_score
-            logger_instance.info(f"EHV Score: {ehv_score:.4f}")
-        except Exception as e:
-            logger_instance.warning(f"Failed to calculate EHV metric: {str(e)}")
-            evaluation_scores['ehv'] = 0.0
-    else:
-        evaluation_scores['ehv'] = 0.0
-    
     return evaluation_scores, tool_recall_metrics
-
-
-def save_results(
-    result: Dict[str, Any],
-    df: pd.DataFrame,
-    pattern: str,
-    base_path: str = "/home/gong0092/wang/Downloads/feature_bench"
-) -> tuple[str, str]:
-    """
-    Save results to JSON and CSV files
-    
-    Args:
-        result: Agent processing result
-        df: DataFrame with results
-        pattern: Agent pattern name
-        base_path: Base path for saving files
-        
-    Returns:
-        Tuple of (json_file_path, csv_file_path)
-    """
-    # Save results to JSON
-    json_file = os.path.join(base_path, f"test_{pattern}_results.json")
-    with open(json_file, 'w', encoding='utf-8') as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-    
-    # Save DataFrame to CSV
-    csv_file = os.path.join(base_path, f"test_{pattern}_results.csv")
-    df.to_csv(csv_file, index=False)
-    
-    return json_file, csv_file
 
 
 def validate_agent_basic(
@@ -758,7 +658,7 @@ ALL_COLUMNS = [
     'task_name', 'design_pattern', 'latency_seconds', 'success_rate', 'total_input_tokens', 'total_output_tokens',
     'total_tokens', 'total_llm_calls', 'input_cost', 'output_cost', 'total_cost', 'report', 'selected_answer', 'correct_answer',
     'options', 'ground_truth_report', 'rouge1', 'rouge2', 'rougeL', 'precision', 'recall', 'f1', 'llm_judge_score',
-    'ehv', 'evaluation_time_seconds', 'generated_report_length', 'ground_truth_report_length', 'has_evaluation',
+    'evaluation_time_seconds', 'generated_report_length', 'ground_truth_report_length', 'has_evaluation',
     'tool_recall', 'tool_precision', 'tool_f1', 'tool_tp', 'tool_fn', 'tool_fp', 'tool_missed', 'tool_extra',
     'has_error', 'error_message', 'created_at', 'completed_tools', 'total_steps', 'tools_executed',
     'reflection_steps', 'total_reflections', 'subtask_results', 'reflection_summary',

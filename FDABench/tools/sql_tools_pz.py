@@ -1,11 +1,6 @@
-"""
-SQL-related tools for FDABench Package.
-
-These tools provide SQL generation, execution, optimization, and debugging capabilities.
-They are designed to work with the tool registry system and integrate with the DatabaseConnectionManager.
-"""
 import json
 import logging
+import re
 from typing import Dict, List, Any, Optional
 import os
 import requests
@@ -21,21 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 def extract_table_name_from_sql(sql_query: str) -> Optional[str]:
-    """
-    Extract the main table name from SQL query.
-    This is a simple implementation focusing on common patterns.
-    """
+   
     try:
-        # Clean the SQL query
         sql_clean = re.sub(r'\s+', ' ', sql_query.strip().upper())
         
-        # Pattern to match FROM clause
         from_pattern = r'FROM\s+([^\s,\(\)]+)'
         match = re.search(from_pattern, sql_clean)
         
         if match:
             table_name = match.group(1).strip()
-            # Remove schema prefixes if any (e.g., schema.table -> table)
             if '.' in table_name:
                 table_name = table_name.split('.')[-1]
             return table_name.lower()
@@ -45,12 +34,7 @@ def extract_table_name_from_sql(sql_query: str) -> Optional[str]:
         logger.error(f"Error extracting table name: {e}")
         return None
 
-
-
-def estimate_tokens(text: str) -> int:
-    """Estimate token count (rough approximation: 1 token ~= 4 characters)"""
-    return max(1, len(text) // 4)
-
+        
 def choose_pz_operator_with_llm(natural_language_query: str, available_operators: List[str], api_key: str) -> tuple[str, dict]:
     """
     Use LLM to choose the most appropriate palimpzest operator for the given query.
@@ -63,7 +47,6 @@ def choose_pz_operator_with_llm(natural_language_query: str, available_operators
     }
     
     try:
-        # Only include actually supported operators in palimpzest
         supported_operators = ["sem_filter", "sem_add_columns"]
         operators_to_consider = [op for op in supported_operators if op in available_operators]
         
@@ -93,10 +76,8 @@ Important Rules:
 Return ONLY the operator name (e.g., "sem_filter"). No explanation needed.
 """
         
-        # Estimate input tokens
-        token_stats['input_tokens'] = estimate_tokens(prompt)
+        # Token counts will be obtained from API response
         
-        # Make direct OpenRouter API call
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -121,10 +102,8 @@ Return ONLY the operator name (e.g., "sem_filter"). No explanation needed.
             result = response.json()
             chosen_operator = result["choices"][0]["message"]["content"].strip().lower()
             
-            # Estimate output tokens
-            token_stats['output_tokens'] = estimate_tokens(chosen_operator)
+            # Token counts already obtained from API response
             
-            # Get actual usage if available from API response
             if 'usage' in result:
                 usage = result['usage']
                 token_stats['input_tokens'] = usage.get('prompt_tokens', token_stats['input_tokens'])
@@ -138,69 +117,193 @@ Return ONLY the operator name (e.g., "sem_filter"). No explanation needed.
             logger.error(f"OpenRouter API call failed with status {response.status_code}: {response.text}")
             chosen_operator = None
         
-        # Validate the chosen operator
         if chosen_operator and chosen_operator in operators_to_consider:
             return chosen_operator, token_stats
         else:
-            # Default fallback logic
             logger.info("Using fallback logic for operator selection")
             query_lower = natural_language_query.lower()
             if any(word in query_lower for word in ["extract", "add column", "compute", "generate field"]):
                 return "sem_add_columns", token_stats
             else:
-                return "sem_filter", token_stats  # Default for most queries
+                return "sem_filter", token_stats  
                 
     except Exception as e:
         logger.error(f"Error choosing palimpzest operator: {e}")
-        return "sem_filter", token_stats  # Default fallback
+        return "sem_filter", token_stats 
 
-# --- REFACTORED FUNCTION ---
-def apply_pz_operator(dataset, operator: str, natural_language_query: str, columns: List[str], 
-                      token_tracker=None, estimated_input_tokens: int = 0, data_rows_count: int = 0):
-    """
-    Apply the chosen palimpzest operator to the dataset.
-    Accepts pre-calculated token estimates and row counts for tracking.
-    """
+def apply_pz_operator(dataset, operator: str, natural_language_query: str, columns: List[str]):
+    
     try:
         filter_prompt = f"The data is relevant to the query: {natural_language_query}"
 
-        # Determine the operation and result (all fall back to sem_filter for now)
         if operator == "sem_filter":
             result = dataset.sem_filter(filter_prompt)
-            category_prefix = f"palimpzest_{operator}"
         elif operator == "sem_add_columns":
             logger.info(f"sem_add_columns requested but not fully implemented, using sem_filter as fallback")
             result = dataset.sem_filter(filter_prompt)
-            category_prefix = f"palimpzest_{operator}_fallback"
         else:
             logger.warning(f"Unknown operator: {operator}, using sem_filter as fallback")
             result = dataset.sem_filter(filter_prompt)
-            category_prefix = "palimpzest_unknown_fallback"
 
-        # Track token usage if a token_tracker is provided and we have rows to process
-        if token_tracker and data_rows_count > 0:
-            # Estimate output tokens based on result size
-            result_len = len(result) if hasattr(result, '__len__') else 0
-            estimated_output_tokens = result_len * 5 if result_len > 0 else 100
-            
-            # Track multiple LLM calls - one for each data row, using the pre-calculated input tokens
-            for i in range(data_rows_count):
-                token_tracker.track_call(
-                    category=f"{category_prefix}_row_{i+1}",
-                    input_tokens=estimated_input_tokens // data_rows_count if data_rows_count > 0 else estimated_input_tokens,
-                    output_tokens=estimated_output_tokens // data_rows_count if data_rows_count > 0 else 0,
-                    model="palimpzest_semantic_operation",
-                    cost=None
-                )
-            
-            logger.info(f"Tracked {data_rows_count} palimpzest '{operator}' operations (one per data row)")
-        
         return result
             
     except Exception as e:
         logger.error(f"Error applying palimpzest operator {operator}: {e}")
-        # Return original dataset if operation fails
         return dataset
+
+
+def track_pz_tokens_with_fallback(output, token_tracker=None, operator: str = "unknown", 
+                                  fallback_input_tokens: int = 0, fallback_output_tokens: int = 0, 
+                                  data_rows_count: int = 0):
+   
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cost = 0.0
+    operation_details = []
+    method_used = "none"
+    
+    try:
+        native_stats_found = False
+        
+        if hasattr(output, 'execution_stats'):
+            stats = output.execution_stats
+            logger.info("Found execution_stats in Palimpzest output - using native tracking")
+            native_stats_found = True
+            method_used = "native_execution_stats"
+
+            for op_stats in stats.get('operator_stats', []):
+                op_input_tokens = op_stats.get('total_input_tokens', 0)
+                op_output_tokens = op_stats.get('total_output_tokens', 0)
+                op_cost = op_stats.get('cost_per_record', 0)
+                op_name = op_stats.get('op_name', 'unknown')
+                
+                total_input_tokens += op_input_tokens
+                total_output_tokens += op_output_tokens
+                total_cost += op_cost
+                
+                operation_details.append({
+                    'op_name': op_name,
+                    'input_tokens': op_input_tokens,
+                    'output_tokens': op_output_tokens,
+                    'cost': op_cost
+                })
+
+        if hasattr(output, 'stats') and output.stats:
+            logger.info("Found stats attribute in Palimpzest output - using native tracking")
+            native_stats_found = True
+            method_used = "native_record_stats"
+            
+            for stat in output.stats:
+                op_input_tokens = getattr(stat, 'total_input_tokens', 0)
+                op_output_tokens = getattr(stat, 'total_output_tokens', 0)
+                op_cost = getattr(stat, 'cost_per_record', 0.0)
+                op_name = getattr(stat, 'op_name', 'unknown')
+                
+                total_input_tokens += op_input_tokens
+                total_output_tokens += op_output_tokens
+                total_cost += op_cost
+                
+                operation_details.append({
+                    'op_name': op_name,
+                    'input_tokens': op_input_tokens,
+                    'output_tokens': op_output_tokens,
+                    'cost': op_cost
+                })
+                
+                logger.info(f"Operation: {op_name}")
+                logger.info(f"  Input tokens: {op_input_tokens}")
+                logger.info(f"  Output tokens: {op_output_tokens}")
+                logger.info(f"  Cost: ${op_cost:.6f}")
+                
+                if token_tracker:
+                    token_tracker.track_call(
+                        category=f"palimpzest_{op_name}",
+                        input_tokens=op_input_tokens,
+                        output_tokens=op_output_tokens,
+                        model="palimpzest_native",
+                        cost=op_cost
+                    )
+
+        if not native_stats_found or (total_input_tokens == 0 and total_output_tokens == 0):
+            logger.warning("Palimpzest native token stats not found or empty - using fallback estimation")
+            method_used = "fallback_estimation"
+            
+            total_input_tokens = fallback_input_tokens
+            
+            if fallback_output_tokens > 0:
+                total_output_tokens = fallback_output_tokens
+            else:
+                result_len = len(output) if hasattr(output, '__len__') else 0
+                if result_len > 0:
+                    try:
+                        result_content = str(output) if hasattr(output, '__str__') else f"{result_len} items"
+                        total_output_tokens = 0  
+                    except:
+                        total_output_tokens = result_len * 5  
+                else:
+                    total_output_tokens = 0
+            
+            if token_tracker and data_rows_count > 0:
+                token_tracker.track_call(
+                    category=f"palimpzest_{operator}_fallback",
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    model="palimpzest_estimated",
+                    cost=None
+                )
+                
+                operation_details.append({
+                    'op_name': f'{operator}_estimated',
+                    'input_tokens': total_input_tokens,
+                    'output_tokens': total_output_tokens,
+                    'cost': 0.0
+                })
+
+        # Log summary statistics
+        logger.info(f"Palimpzest Token Usage Summary (method: {method_used}):")
+        logger.info(f"  Input tokens: {total_input_tokens}")
+        logger.info(f"  Output tokens: {total_output_tokens}")
+        logger.info(f"  Total cost: ${total_cost:.6f}")
+        
+        if token_tracker and (total_input_tokens > 0 or total_output_tokens > 0):
+            token_tracker.track_call(
+                category=f"palimpzest_{operator}_total",
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+                model=f"palimpzest_{method_used}",
+                cost=total_cost
+            )
+        
+        return {
+            'total_input_tokens': total_input_tokens,
+            'total_output_tokens': total_output_tokens,
+            'total_cost': total_cost,
+            'operation_details': operation_details,
+            'method_used': method_used,
+            'native_stats_available': native_stats_found
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in token tracking, using basic fallback: {e}")
+        
+        if token_tracker and (fallback_input_tokens > 0 or fallback_output_tokens > 0):
+            token_tracker.track_call(
+                category=f"palimpzest_{operator}_error_fallback",
+                input_tokens=fallback_input_tokens,
+                output_tokens=fallback_output_tokens,
+                model="palimpzest_error_fallback",
+                cost=None
+            )
+        
+        return {
+            'total_input_tokens': fallback_input_tokens,
+            'total_output_tokens': fallback_output_tokens,
+            'total_cost': 0.0,
+            'operation_details': [],
+            'method_used': 'error_fallback',
+            'native_stats_available': False,
+            'error': str(e)
+        }
 
 class SQLExecutionTool:
     """Enhanced tool for executing SQL queries with LLM-based palimpzest operator selection"""
@@ -208,7 +311,6 @@ class SQLExecutionTool:
     def __init__(self, db_manager=None, token_tracker=None):
         self.db_manager = db_manager
         self.token_tracker = token_tracker
-        # Only include actually supported operators
         self.available_operators = ["sem_filter", "sem_add_columns"]
     
     def execute(self, sql_query: str = None, database_name: str = None,
@@ -231,7 +333,6 @@ class SQLExecutionTool:
             Dictionary with status and results
         """
         try:
-            # If no SQL provided, try to get from previous results
             if not sql_query and previous_results:
                 for tool_name in ["sql_generate", "generated_sql"]:
                     if tool_name in previous_results:
@@ -243,20 +344,16 @@ class SQLExecutionTool:
             if not sql_query:
                 return {"status": "error", "error": "No SQL query provided"}
 
-               # ENHANCEMENT 1: Extract table name and modify SQL to get whole table
             table_name = extract_table_name_from_sql(sql_query)
             if table_name:
-                # Replace the complex SQL with simple SELECT * FROM table
                 modified_sql = f"SELECT * FROM {table_name}"
                 logger.info(f"Modified SQL from complex query to: {modified_sql}")
                 sql_query = modified_sql
             else:
                 sql_query = sql_query
             
-            # Use database manager if available for real execution
             if self.db_manager and database_name and database_type:
                 try:
-                    # Import the DatabaseConfig class or create a local one if import fails
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
@@ -267,7 +364,6 @@ class SQLExecutionTool:
                             db_name: str
                             connection_params: Dict[str, Any] = None
                     
-                    # Get database configuration
                     if hasattr(self.db_manager, 'get_database_config') and instance_id:
                         config = self.db_manager.get_database_config(instance_id, database_name, database_type)
                     else:
@@ -277,14 +373,11 @@ class SQLExecutionTool:
                             db_name=database_name
                         )
                     
-                    # Execute SQL using database manager
                     execution_result = self.db_manager.execute_sql(config, sql_query)
                     
                     if execution_result["status"] == "success":
-                        # Apply palimpzest processing if natural_language_query is provided
                         if natural_language_query:
                             try:
-                                # Convert execution_result to pandas DataFrame
                                 query_results = execution_result["results"]["query_results"]
                                 columns = execution_result["results"].get("columns", [])
                                 
@@ -292,29 +385,24 @@ class SQLExecutionTool:
                                     df = pd.DataFrame(query_results, columns=columns)
 
                                     
-                                    # --- NEW: ESTIMATE TOKENS USING THE DATAFRAME ---
-                                    # This is now done here, where the DataFrame is easily accessible.
-                                    pz_estimated_input_tokens = 0
+                                    fallback_input_tokens = 0
+                                    fallback_output_tokens = 0
                                     if not df.empty:
                                         filter_prompt_for_estimation = f"The data is relevant to the query: {natural_language_query}"
-                                        # Estimate based on the prompt plus the content of the entire DataFrame
-                                        pz_estimated_input_tokens = estimate_tokens(filter_prompt_for_estimation) + estimate_tokens(df.to_string())
+                                        fallback_input_tokens = 0  # No token estimation without API response
 
-                                    # Define file paths using relative path from project root
-                                    # NOTE: Consider using a temporary directory for better file management
+                                   
                                     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
                                     data_dir = os.path.join(project_root, "examples", "data")
                                     os.makedirs(data_dir, exist_ok=True)
                                     csv_file_path = os.path.join(data_dir, "temp_data.csv")
                                     output_dir = os.path.join(data_dir, "pz-data")
                                     
-                                    # Cleanup previous run's files
                                     if os.path.exists(csv_file_path): os.remove(csv_file_path)
                                     if os.path.exists(output_dir): shutil.rmtree(output_dir)
                                     os.makedirs(output_dir, exist_ok=True)
 
 
-                                    # Save to CSV and create text files for Palimpzest
                                     df.to_csv(csv_file_path, index=False)
                                     for i, row in df.iterrows():
                                         filename = f"pz_temp{i+1}.txt"
@@ -330,11 +418,9 @@ class SQLExecutionTool:
                                         elif np.issubdtype(dtype, np.datetime64): return str
                                         else: return str
 
-                                    # Define column schema for palimpzest
                                     pz_columns = [{"name": col, "type": infer_pz_type(df[col].dtype), "desc": f"Column {col}"} for col in columns]
                                     dataset = dataset.sem_add_columns(pz_columns)
 
-                                    # Use LLM to choose the appropriate operator
                                     api_key = os.environ.get('OPENROUTER_API_KEY')
                                     if not api_key:
                                         raise ValueError("Missing OPENROUTER_API_KEY for Palimpzest operator selection")
@@ -353,26 +439,30 @@ class SQLExecutionTool:
                                         )
                                     logger.info(f"LLM chose operator: {chosen_operator}")
 
-                                    # --- MODIFIED: CALL apply_pz_operator WITH NEW ARGS ---
                                     processed_dataset = apply_pz_operator(
                                         dataset=dataset, 
                                         operator=chosen_operator, 
                                         natural_language_query=natural_language_query, 
-                                        columns=columns, 
-                                        token_tracker=self.token_tracker,
-                                        estimated_input_tokens=pz_estimated_input_tokens,  # Pass pre-calculated value
-                                        data_rows_count=len(df)  # Pass the row count
+                                        columns=columns
                                     )
 
-                                    # Execute with palimpzest using DeepSeek V3
                                     config = pz.QueryProcessorConfig(policy=pz.MinCost(), available_models=[Model.DEEPSEEK_V3], verbose=True)
                                     output = processed_dataset.run(config)
                                     
-                                    # Convert back to expected format
+                                    token_stats = track_pz_tokens_with_fallback(
+                                        output=output,
+                                        token_tracker=self.token_tracker,
+                                        operator=chosen_operator,
+                                        fallback_input_tokens=fallback_input_tokens,
+                                        fallback_output_tokens=fallback_output_tokens,
+                                        data_rows_count=len(df)
+                                    )
+                                    
                                     filtered_df = output.to_df(cols=columns)
                                     filtered_results = filtered_df.to_dict('records')
                                     
                                     logger.info(f"Palimpzest processed {len(filtered_results)} results (original: {len(df)})")
+                                    logger.info(f"Token tracking method used: {token_stats.get('method_used', 'unknown')}")
                                     
                                     return {
                                         "status": "success",
@@ -386,15 +476,21 @@ class SQLExecutionTool:
                                             "instance_id": instance_id,
                                             "columns": columns,
                                             "pz_operator_used": chosen_operator,
-                                            "filtered_by_palimpzest": True
+                                            "filtered_by_palimpzest": True,
+                                            "token_stats": {
+                                                "total_input_tokens": token_stats.get('total_input_tokens', 0),
+                                                "total_output_tokens": token_stats.get('total_output_tokens', 0),
+                                                "total_cost": token_stats.get('total_cost', 0.0),
+                                                "method_used": token_stats.get('method_used', 'unknown'),
+                                                "native_stats_available": token_stats.get('native_stats_available', False),
+                                                "operation_details": token_stats.get('operation_details', [])
+                                            }
                                         }
                                     }
                                         
                             except Exception as e:
                                 logger.error(f"Palimpzest processing failed, returning original SQL results: {e}")
-                                # Fall back to original results if palimpzest processing fails
                     
-                    # This block will be reached if Palimpzest fails or is skipped
                     return {
                         "status": "success",
                         "results": {
@@ -413,7 +509,6 @@ class SQLExecutionTool:
                     logger.error(f"Database manager execution failed: {e}")
                     return {"status": "error", "error": f"Database execution failed: {str(e)}"}
             
-            # If required parameters are missing for db_manager
             error_msg_map = {
                 "db_manager": "Database manager is not available for SQL execution",
                 "database_name": "Database name is required for SQL execution",
@@ -429,7 +524,6 @@ class SQLExecutionTool:
 
 
 class SQLGenerationTool:
-    """Tool for generating SQL queries from natural language"""
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -438,32 +532,16 @@ class SQLGenerationTool:
     def execute(self, natural_language_query: str, database_name: str = None, 
                 database_type: str = None, instance_id: str = None,
                 schema_info: Dict = None, **kwargs) -> Dict[str, Any]:
-        """
-        Generate SQL query from natural language.
         
-        Args:
-            natural_language_query: The query in natural language
-            database_name: Target database name
-            database_type: Type of database (bird, spider2-lite, etc.)
-            instance_id: Instance identifier for database connection
-            schema_info: Database schema information (optional)
-            **kwargs: Additional parameters
-            
-        Returns:
-            Dictionary with status and results
-        """
         try:
             if not natural_language_query:
                 return {"status": "error", "error": "No natural language query provided"}
             
-            # Get schema info from database manager if available and not provided
             if not schema_info and self.db_manager and database_name:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -473,7 +551,6 @@ class SQLGenerationTool:
                             connection_params: Dict[str, Any] = None
                     
                     if database_type and instance_id:
-                        # Use get_database_config to get proper connection params
                         if hasattr(self.db_manager, 'get_database_config'):
                             config = self.db_manager.get_database_config(instance_id, database_name, database_type)
                         else:
@@ -488,7 +565,7 @@ class SQLGenerationTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info: {e}")
             
-            # Build prompt for SQL generation
+           
             prompt_parts = [
                 f'Given the following database schema for the {database_type or "unknown"} database "{database_name}":',
                 ''
@@ -524,7 +601,7 @@ class SQLGenerationTool:
             
             prompt = "\n".join(prompt_parts)
             
-            # Use LLM client if available, otherwise return error
+           
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     generated_sql = self.llm_client.call_llm(
@@ -544,7 +621,7 @@ class SQLGenerationTool:
             else:
                 return {"status": "error", "error": "LLM client not available or does not have call_llm method"}
             
-            # Validate that we actually generated meaningful SQL
+           
             if not mock_sql or mock_sql.strip() == "" or "ERROR" in mock_sql.upper():
                 return {"status": "error", "error": "Failed to generate valid SQL query"}
             
@@ -566,7 +643,7 @@ class SQLGenerationTool:
     
 
 class SQLOptimizationTool:
-    """Tool for optimizing SQL queries"""
+   
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -575,32 +652,17 @@ class SQLOptimizationTool:
     def execute(self, sql_query: str, db_name: str = None, 
                 database_type: str = None, instance_id: str = None,
                 schema_info: Dict = None, **kwargs) -> Dict[str, Any]:
-        """
-        Optimize SQL query for better performance.
-        
-        Args:
-            sql_query: SQL query to optimize
-            db_name: Database name
-            database_type: Type of database (bird, spider2-lite, etc.)
-            instance_id: Instance identifier for database connection
-            schema_info: Schema information for optimization context
-            **kwargs: Additional parameters
-            
-        Returns:
-            Dictionary with status and results
-        """
+       
         try:
             if not sql_query:
                 return {"status": "error", "error": "No SQL query provided"}
             
-            # Get schema info if not provided
             if not schema_info and self.db_manager and db_name and database_type:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
+                       
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -623,7 +685,7 @@ class SQLOptimizationTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info for optimization: {e}")
             
-            # Use LLM for optimization if available
+           
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     prompt = f"""
@@ -676,7 +738,7 @@ Return ONLY the optimized SQL query. If no optimization is possible, return the 
 
 
 class SQLDebugTool:
-    """Tool for debugging SQL queries"""
+   
     
     def __init__(self, llm_client=None, db_manager=None):
         self.llm_client = llm_client
@@ -706,14 +768,11 @@ class SQLDebugTool:
             if not failed_sql:
                 return {"status": "error", "error": "No SQL query provided for debugging"}
             
-            # Get schema info if not provided
             if not schema_info and self.db_manager and database_name and database_type:
                 try:
-                    # Import the DatabaseConfig class
                     try:
                         from ..utils.database_connection_manager import DatabaseConfig
                     except ImportError:
-                        # Create a local DatabaseConfig if import fails
                         from dataclasses import dataclass
                         @dataclass
                         class DatabaseConfig:
@@ -736,7 +795,6 @@ class SQLDebugTool:
                 except Exception as e:
                     logger.warning(f"Could not retrieve schema info for debugging: {e}")
             
-            # Use LLM for debugging if available
             if self.llm_client and hasattr(self.llm_client, 'call_llm'):
                 try:
                     prompt = f"""
@@ -776,7 +834,6 @@ Return ONLY the corrected SQL query. If you cannot fix the query, return "QUERY_
                             "error": "Unable to fix the SQL query based on the error message"
                         }
                     
-                    # Try to execute the corrected SQL if db_manager is available
                     if self.db_manager and database_name and database_type:
                         try:
                             execution_tool = SQLExecutionTool(self.db_manager)
