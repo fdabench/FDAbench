@@ -1,7 +1,11 @@
 # FDABench
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473)
+<div align="left" style="line-height: 1;">
+  <a href="https://www.python.org/downloads/" target="_blank"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg"/></a>
+  <a href="https://opensource.org/licenses/MIT" target="_blank"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"/></a>
+  <a href="https://arxiv.org/pdf/2509.02473" target="_blank"><img alt="arXiv" src="https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg"/></a>
+  <a href="https://huggingface.co/datasets/FDAbench2026/FDAbench-Full" target="_blank"><img alt="Hugging Face Full" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-FDAbench--Full-ffc107?color=ffc107&logoColor=white"/></a>
+  <a href="https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite" target="_blank"><img alt="Hugging Face Lite" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-FDAbench--Lite-ffc107?color=ffc107&logoColor=white"/></a>
+</div>
 
 ## 📰 News
 
