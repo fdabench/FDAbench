@@ -40,29 +40,34 @@ class SQLGenerationTool:
                     sql_lines.append('')  # Preserve empty lines in SQL
                 continue
                 
-            # Check if line starts with SQL keyword
             if any(line.upper().startswith(keyword) for keyword in sql_keywords):
                 in_sql = True
                 sql_lines.append(line)
             elif in_sql:
-                # Check if this looks like a continuation of SQL (starts with common SQL patterns)
-                if (line.upper().startswith(('FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING', 
-                                           'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'OUTER JOIN',
-                                           'AND', 'OR', 'UNION', 'INTERSECT', 'EXCEPT', 'LIMIT',
-                                           'OFFSET', 'AS', 'ON')) or
-                    line.startswith((')', '(', ',')) or
-                    re.match(r'^\s*[\w\.\[\]]+\s*[=<>!]+', line) or  # condition patterns
-                    re.match(r'^\s*[\w\.\[\]]+\s*,', line)):  # column lists
+                if line.endswith(';'):
                     sql_lines.append(line)
-                else:
-                    # This looks like explanatory text, stop collecting SQL
                     break
+
+                non_sql_patterns = [
+                    line.startswith('Note:'),
+                    line.startswith('Explanation:'),
+                    line.startswith('This query'),
+                    line.startswith('The above'), 
+                    line.startswith('Result:'),
+                    line.startswith('Output:'),
+                    line.startswith('##'),  
+                    line.startswith('**'),  
+                    ':' in line and not any(keyword in line.upper() for keyword in ['SELECT', 'CASE', 'CAST']),  # Explanatory text with colon
+                ]
+
+                if any(non_sql_patterns):
+                    break
+
+                sql_lines.append(line)
         
         if sql_lines:
             sql_query = '\n'.join(sql_lines).strip()
-            # Clean up any remaining explanatory text at the beginning
             if ':' in sql_query:
-                # Split on colon and take the part that starts with SQL keyword
                 parts = sql_query.split(':', 1)
                 if len(parts) > 1:
                     potential_sql = parts[1].strip()
@@ -70,7 +75,6 @@ class SQLGenerationTool:
                         sql_query = potential_sql
             return sql_query
         
-        # Fallback: return original response if no clear SQL pattern found
         return response
     
     def execute(self, natural_language_query: str, database_name: str = None, 
@@ -147,7 +151,9 @@ class SQLGenerationTool:
                 '- Ensure correct SQL syntax for the database type',
                 '- For JSON fields in BigQuery, use proper JSON functions',
                 '- For SQLite JSON fields, use json_extract() function',
-                '- Return ONLY the SQL query',
+                '- Return ONLY the SQL query - no explanation, no description, no text before or after',
+                '- Do NOT include any introductory text like "Here is the SQL query" or explanatory text',
+                '- Do NOT add comments or descriptions about what the query does',
                 '- If the request cannot be answered with the given schema, return "QUERY_IMPOSSIBLE"'
             ])
             

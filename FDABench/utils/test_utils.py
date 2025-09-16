@@ -229,13 +229,10 @@ def create_query_row(
                 f'{phase}_max_latency': 0.0
             })
     
-    # 确保base_row包含所有定义的列
     for col in ALL_COLUMNS:
         if col not in base_row:
             base_row[col] = None
     
-    return {k: v for k, v in base_row.items() if k in ALL_COLUMNS
-    }
     
     # Pattern-specific metrics
     if pattern == 'tooluse':
@@ -274,7 +271,7 @@ def create_query_row(
             'coordination_results': json.dumps(result.get('coordination_results', []))
         })
     
-    return base_row
+    return {k: v for k, v in base_row.items() if k in ALL_COLUMNS}
 
 
 def store_in_duckdb(df: pd.DataFrame, duckdb_path: str, task_name: str) -> bool:
