@@ -157,7 +157,7 @@ class ToolUseAgent(BaseAgent):
                     context_parts.append(f"{tool_name}: result available")
             context_summary = f"Previous results: {', '.join(context_parts)}"
         
-        prompt = f"""Q: {query.advanced_query[:50] if query.advanced_query else query.query[:50]}
+        prompt = f"""Q: {query.advanced_query if query.advanced_query else query.query}
 Tools: {', '.join(available_tools)}
 Next?"""
 

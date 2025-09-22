@@ -414,7 +414,7 @@ JSON:"""
                 subtask_id="alt_search",
                 tool="web_context_search",
                 description="Quick web search",
-                input={"query": query.query[:100], "max_results": 2}
+                input={"query": query.query, "max_results": 2}
             ))
             
         return alternative_subtasks
@@ -689,8 +689,8 @@ JSON:"""
         
         # Ultra-minimal report prompt for maximum token efficiency
         if has_tool_results:
-            prompt = f"""Q: {(query.query or '')[:30]}
-R: {str(self.tool_results)[:100]}
+            prompt = f"""Q: {query.query or ''}
+R: {str(self.tool_results)}
 
 Report:
 ## Executive Summary
@@ -701,7 +701,7 @@ Report:
 
 Short."""
         else:
-            prompt = f"""Q: {(query.query or '')[:30]}
+            prompt = f"""Q: {query.query or ''}
 
 Report:
 ## Executive Summary

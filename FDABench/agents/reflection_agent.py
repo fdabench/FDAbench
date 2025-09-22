@@ -117,7 +117,7 @@ class ReflectionAgent(BaseAgent):
 
         # Ultra-simplified reflection prompt
         reflection_prompt = f"""Action: {action.action_type} -> {observation.status}
-Query: {query.advanced_query[:50]}
+Query: {query.advanced_query}
 
 Better approach? Reply "OK" or suggest tool from: {query.tools_available}"""
 
@@ -257,7 +257,7 @@ Better approach? Reply "OK" or suggest tool from: {query.tools_available}"""
         else:
             next_step_suggestion = "All core tools completed, consider web_context_search or vectorDB_search for additional context"
         
-        prompt = f"""Query: {query.advanced_query[:100]}
+        prompt = f"""Query: {query.advanced_query}
 Database: {query.db}
 Available Tools: {allowed_tools}
 Context: {context_str}

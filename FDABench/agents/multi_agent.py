@@ -284,7 +284,7 @@ Return ONLY valid JSON array.
                     from_expert="sql",
                     to_expert="optimize",
                     message_type="collaboration",
-                    content=f"About to generate SQL query, please provide optimization suggestions and best practices. Query type: {query.advanced_query[:100]}...",
+                    content=f"About to generate SQL query, please provide optimization suggestions and best practices. Query type: {query.advanced_query}...",
                     timestamp=current_time,
                     priority=2,
                     metadata={"tool": action.tool_name, "query_type": "generation"}
@@ -312,7 +312,7 @@ Return ONLY valid JSON array.
                 from_expert="web",
                 to_expert="vector",
                 message_type="collaboration",
-                content=f"Web search expert needs vector search expert to provide relevant document context. Search topic: {query.advanced_query[:100]}...",
+                content=f"Web search expert needs vector search expert to provide relevant document context. Search topic: {query.advanced_query}...",
                 timestamp=current_time,
                 priority=2,
                 metadata={"tool": action.tool_name, "search_topic": query.advanced_query}
@@ -1211,7 +1211,7 @@ Answer:"""
         Options: {json.dumps(query.options)}
         
         Multi-Agent Expert Insights:
-        {json.dumps(expert_insights, indent=2)[:800]}...
+        {json.dumps(expert_insights, indent=2)}...
         
         You must select EXACTLY ONE answer from the available options: {options_text}
         Your response should contain only the letter of your chosen answer.

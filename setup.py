@@ -7,14 +7,14 @@ def read_readme():
     if os.path.exists(readme_path):
         with open(readme_path, "r", encoding="utf-8") as f:
             return f.read()
-    return "FDABench - A comprehensive database benchmark suite for evaluating DB agents"
+    return "FDABench - A data agent benchmark specifically designed for evaluating data agents in multi-source data analytical scenarios"
 
 setup(
     name="fdabench",
-    version="0.1.0",
+    version="0.1.1",
     author="FDABench Team",
-    author_email="contact@fdabench.com",
-    description="A comprehensive database benchmark suite for evaluating DB agents with LLM capabilities",
+    author_email="FDAbench2026@gmail.com",
+    description="The first data agent benchmark for evaluating agents in multi-source data analytical scenarios with 2,007 diverse tasks",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/fdabench/fdabench",
