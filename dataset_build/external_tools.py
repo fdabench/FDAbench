@@ -74,18 +74,53 @@ class WebSearchTool(ExternalTool):
         try:
             if not self.api_key:
                 return "Web search unavailable: Missing OPENROUTER_API_KEY"
-                
+
+            # Huawei enterprise example from TechReport
+            huawei_example = """Enterprise Example 1 — Huawei Expense Reimbursement Compliance Review Data Agent
+
+Huawei's Expense ERP Data Agent conducts intelligent compliance reviews: The reimbursement review data agent retrieves recent employee expense claim information from the relational database. Based on employee grade level and submission timing, it queries the vector database for applicable reimbursement policies. For each expense item, it cross-validates supporting documentation and transaction timestamps with regulatory and internal policy databases to ensure compliance. The agent then identifies anomalies, such as late submissions, over-claiming, or policy violations, and generates structured compliance summaries linking factual data, contextual reasoning, and policy evidence.
+"""
+
+            prompt_content = f"""Context:
+• Original query: {query}
+• Enterprise demonstration: {huawei_example}
+
+Drawing from the provided Huawei enterprise data agent demonstration, perform targeted web searches to support the original query. The demonstration illustrates how data agents integrate structured databases, vector-based policy retrieval, and external validation in real analytical workflows. Following this pattern, focus on gathering external contextual information, current events, regulatory frameworks, and validation sources that complement structured database facts. The retrieved information should provide interpretive insights and real-world context that enable heterogeneous data integration and multi-source reasoning.
+
+Search Objectives:
+• Identify recent developments, industry benchmarks, and data-driven trends directly related to the original query.
+• Retrieve applicable regulatory frameworks, policy guidelines, and institutional standards governing the topic.
+• Collect authoritative expert analyses, peer-reviewed research, and technical evaluations providing explanatory context.
+• Extract implementation case studies or best practices illustrating how similar analytical tasks were operationalized.
+• Gather quantitative indicators, empirical datasets, or performance metrics that enable comparative or temporal assessment.
+
+Source Requirements:
+• Peer-reviewed journals, conference papers, and academic white papers.
+• Industry reports, market analyses, and technical briefs from recognized consulting or data analytics firms.
+• Government, inter-agency, or regulatory authority publications relevant to the domain.
+• Verified business, finance, or technology sources with demonstrable credibility and traceable citations.
+
+Quality Thresholds:
+• Relevance Score: retrieved content must directly address the analytical focus of the original query.
+• Authority Score: prioritize sources with institutional, academic, or governmental authority.
+• Recency: prefer information published within the past 24 months unless historical data are essential for longitudinal analysis.
+• Consistency: cross-validate findings across at least two independent, high-confidence sources before inclusion.
+
+Output Structure:
+1. Executive Summary (≈200 words) — concise synthesis of key findings relevant to the original query.
+2. Quantitative Evidence — tabulated or cited numerical data with explicit source attribution.
+3. Qualitative Insights — expert commentary, thematic patterns, and emerging trends.
+4. Regulatory & Policy Context — applicable frameworks, standards, or institutional rules.
+5. Market or Domain Intelligence — comparative positioning, benchmarks, or regional insights.
+6. Implementation Guidance — actionable observations or procedural recommendations grounded in the retrieved evidence."""
+
             messages = [
                 {
-                    "role": "system",
-                    "content": "You are a web search assistant. Provide relevant web information related to the query to help understand the context and background.",
-                },
-                {
-                    "role": "user", 
-                    "content": f"Please search for and provide relevant web information about: {query}",
+                    "role": "user",
+                    "content": prompt_content,
                 },
             ]
-            
+
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
                 headers={
@@ -95,9 +130,12 @@ class WebSearchTool(ExternalTool):
                 data=json.dumps({
                     "model": "perplexity/sonar-pro",
                     "messages": messages,
+                    "temperature": 0.7,
+                    "top_k": 0,
+                    "max_tokens": 6000
                 })
             )
-            
+
             if response.status_code == 200:
                 response_data = response.json()
                 if 'choices' in response_data and response_data['choices']:
@@ -106,7 +144,7 @@ class WebSearchTool(ExternalTool):
                     return "No response content available"
             else:
                 return f"API request failed with status code: {response.status_code}"
-                
+
         except Exception as e:
             return f"Web search error: {e}"
 
@@ -134,7 +172,11 @@ class VectorSearchTool(ExternalTool):
         """Get the global embedding model"""
         if self._embedding_model is None:
             try:
-                self._embedding_model = OpenAIEmbedding(embed_batch_size=10, model="text-embedding-3-small")
+                self._embedding_model = OpenAIEmbedding(
+                    embed_batch_size=50,
+                    model="text-embedding-3-small",
+                    dimensions=1536
+                )
                 Settings.embed_model = self._embedding_model
             except Exception as e:
                 self.logger.error(f"Failed to initialize embedding model: {e}")
@@ -170,29 +212,29 @@ class VectorSearchTool(ExternalTool):
         """Create vector index online from bird.jsonl data"""
         if self._vector_index is not None:
             return self._vector_index
-        
+
         try:
             # Load bird data
             texts = self._load_bird_data()
-            
+
             # Import required modules for online vector creation
             from llama_index.core import VectorStoreIndex
             from llama_index.core.readers import StringIterableReader
             from llama_index.core.node_parser import SentenceSplitter
-            
+
             # Create documents from texts
             documents = StringIterableReader().load_data(texts=texts)
-            
-            # Split into chunks
-            splitter = SentenceSplitter(chunk_size=256)
+
+            # Split into chunks (512 tokens) as per TechReport
+            splitter = SentenceSplitter(chunk_size=512)
             nodes = splitter.get_nodes_from_documents(documents)
-            
-            # Create vector index online
+
+            # Create vector index online (cosine similarity is default)
             self._vector_index = VectorStoreIndex(nodes)
-            
+
             self.logger.info(f"Created online vector index with {len(nodes)} nodes from {len(texts)} texts")
             return self._vector_index
-            
+
         except Exception as e:
             self.logger.error(f"Failed to create online vector index: {e}")
             return None
@@ -203,17 +245,18 @@ class VectorSearchTool(ExternalTool):
             index = self._create_online_vector_index()
             if index is None:
                 return None
-            
-            # Simple query without complex enhancements
-            query_engine = index.as_query_engine(similarity_top_k=3)
+
+            query_engine = index.as_query_engine(
+                similarity_top_k=25,
+                similarity_mode="cosine"
+            )
             response = query_engine.query(query)
-            
-            # Return response text
+
             if hasattr(response, 'response') and response.response:
                 return response.response
             else:
                 return str(response) if response else None
-                
+
         except Exception as e:
             self.logger.error(f"Vector search failed: {e}")
             return None

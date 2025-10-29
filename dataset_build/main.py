@@ -197,7 +197,7 @@ class SingleChoiceGenerator:
             if not self.api_key:
                 self.logger.warning("Missing OPENROUTER_API_KEY, returning empty response")
                 return ""
-                
+
             import requests
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
@@ -206,18 +206,22 @@ class SingleChoiceGenerator:
                     "Content-Type": "application/json",
                 },
                 data=json.dumps({
-                    "model": "anthropic/claude-3.5-sonnet",
-                    "messages": [{"role": "user", "content": prompt}]
+                    "model": "anthropic/claude-sonnet-4",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "frequency_penalty": 0.3,
+                    "max_tokens": 3000
                 })
             )
-            
+
             if response.status_code == 200:
                 response_data = response.json()
                 if 'choices' in response_data and response_data['choices']:
                     return response_data['choices'][0]['message']['content'].strip()
-        
+
             return ""
-            
+
         except Exception as e:
             self.logger.error(f"LLM call error: {e}")
             return ""
@@ -234,11 +238,10 @@ class SingleChoiceGenerator:
         correct_options = ['A', 'B', 'C', 'D']
         random_correct_answer = random.choice(correct_options)
         
-        # Build prompt parts for single external source
         prompt_parts = [
-            f"Original question: {original_query}(This part is not allowed to change. No deletions or Rephrase allowed)\n",
-            f"Structured/statistical result: {gold_result}\n", 
-            f"External knowledge: {external_result}\n",
+            f"Original query: {original_query}\n",
+            f"SQL result: {gold_result}\n",
+            f"Web summary: {external_result}\n",
             "\n"
         ]
         
@@ -284,67 +287,44 @@ class SingleChoiceGenerator:
     def _get_prompt_template(self, correct_answer: str = 'B') -> str:
         """Get the prompt template for single choice generation with randomized correct answer"""
         return (
-            "Based on the above information, generate a comprehensive response that includes:\n"
-            "ONE single-choice question to test understanding \n\n"  
-            "An advanced question that combines the original question with analytical extensions (Not a key factor in solving the problem)\n"
+            "Task Requirements:\n\n"
 
-            "- Mathematical calculations don't have to be difficult (addition, subtraction, multiplication and division within 1000 are sufficient, and no complicated calculations are required), but they must be correct! ! ! !\n"
+            "1) Query Construction\n"
+            "• Preserve the original analytical intent while extending scope to require heterogeneous data integration.\n"
+            "• Request specific database metrics (fields, aggregations, temporal/categorical breakdowns) needed for quantitative evidence.\n"
+            "• Specify external context requirements (theoretical frameworks, policy background, domain knowledge, validation sources).\n"
+            "• Design questions such that database facts alone are insufficient without interpretive context from unstructured sources.\n"
+            "• Avoid revealing numerical answers or conclusions within the question itself to prevent information leakage.\n\n"
 
+            "2) Heterogeneous Integration Requirements\n"
+            "• Design the task so that it cannot be solved from any single data source. Each source must provide essential, non-redundant information.\n"
+            "• Structured Database (SQL): Provides quantitative evidence, precise metrics, temporal/categorical breakdowns, and statistical patterns.\n"
+            "• Vector Database: Supplies theoretical frameworks, domain knowledge, conceptual models, technical specifications, and interpretive guidelines.\n"
+            "• Web Search: Provides current events, regulatory updates, policy context, external validation, and real-world corroboration.\n"
+            "• Ensure complementary roles: SQL answers 'what/how much,' Vector explains 'why/how to interpret,' Web validates 'current context/applicability.'\n\n"
 
-            "You must respond with valid JSON in this exact format:\n"
-            "{\n"
-            "  \"single_choice_questions\": [\n"
-            "    {\n"
-            "      \"question\": \"[original_query + Question that requires reasoning and understanding + Calculation rules have to be used. (based on original_query andreal world insightful situation of data analysis actual meaning, The Calculation rules of the inference calculation from gold_result to get the answer must be explained here! ! ! ! Do not use any calculations that are not mentioned)]\",\n"
-            "      \"options\": {\n"
-            "        \"A\": \"[First option text (The calculated value and practical strategic inspirational significance)]\",\n"
-            "        \"B\": \"[Second option text (The calculated value and practical strategic inspirational significance)]\",\n"
-            "        \"C\": \"[Third option text (The calculated value and practical strategic inspirational significance)]\",\n"
-            "        \"D\": \"[Fourth option text (The calculated value and practical strategic inspirational significance)]\"\n"
-            "      },\n"
-            f"    \"correct_answer\": [\"{correct_answer}\"] (single-choice only - array with one correct option),\n"
-            "      \"explanation\": \"[Explanation of why the answer is correct]\"\n"
-            "    }\n"
-            "  ]\n"
-            
+            "3) Multi-Source Reasoning Chain\n"
+            "   a) SQL Execution: Identify required database tables, fields, aggregations, and constraints. Extract quantitative patterns without revealing numeric answers in the question.\n"
+            "   b) Vector Retrieval: Surface relevant theoretical frameworks, domain concepts, and interpretive guidelines that contextualize database findings.\n"
+            "   c) Web Search: Retrieve current events, policy updates, and external validation sources. Identify corroborating or contradictory information requiring resolution.\n"
+            "   d) Cross-Source Integration: Establish connections between SQL quantitative patterns, Vector conceptual frameworks, and Web contextual validation.\n"
+            "   e) Framework Application: Apply retrieved domain methodologies to reconcile information conflicts and establish causal interpretations.\n"
+            "   f) Synthesis: Produce evidence-backed conclusions integrating all three sources, with clear attribution and reasoning transparency.\n\n"
 
-            "CRITICAL REQUIREMENTS for single_choice_questions:\n"
-            "- You should guarantee that the question must be not able to be answered by the original question, and the answer must be answered correctly without the web and vector summary\n"
-            "- EVERY question MUST begin with the complete Original question, No deletions or Rephrase allowed, then add inference elements\n"
-            "- The question must not expose raw numerical values from gold_result or external sources. However, the correct answer must be derivable only by performing calculations using gold_result values, combined with relevant external knowledge.\n"
-            "- Mathematical calculations don't have to be difficult (addition, subtraction, multiplication and division within 1000 are sufficient, and no complicated calculations are required), but they must be correct! ! ! \n"
-            "- Error options must be obvious calculation error According to the same error gold_result reasoning. However the practical strategic inspirational significance should looks correct , Only calculation errors are used to judge\n"
-            "- The value in any option MUST be calculated according to the calculation rules in the question. Do not use any calculation rules not mentioned in the question.!!! \n"
-            "- All incorrect options must be derived from a consistent miscalculation pattern applied to the correct gold_result\n"
-            f"- The correct answer must be placed in option {correct_answer}! Make sure option {correct_answer} contains the correct calculation and reasoning.\n"
-            "- Questions MUST require combining numerical values from gold_result with external knowledge to determine the answer\n"
-            "- Options must NEVER contain the exact numerical values from gold_result - this is ABSOLUTELY FORBIDDEN. But they must contain different values ​​obtained by reasoning with the exact value in gold_result, which is also the key to the question - mathematics and reasoning ability\n"
-            "- Each option must contain DIFFERENT mathematical transformations of gold_result values (e.g., percentages, Plus, minus)\n"
-            "- All incorrect options must result from consistent miscalculations based on the same flawed logic applied to the correct gold_result\n"
-            f"- Put the CORRECT calculation and reasoning in option {correct_answer}. Put calculation errors in the other options.\n"
-            "- After each option's value, add the actual meaning of the value and the data analysis in the question scenario.\n"
-            "- don't need to do complex calculations, but the calculation logic and practical significance must be reasonable.\n" 
-            "- The relationship between each option and the gold_result must not be directly obvious; instead, it should require at least one explicit arithmetic step to derive, such as a percentage change, ratio, or sum\n"
-            "- In the question, do not include specific values from external knowledge or gold_result\n"
-            f"- In the explanation, clearly show the exact calculations that make option {correct_answer} correct, and explain why the other options are wrong due to calculation errors.\n"
-            "- It should be IMPOSSIBLE to answer correctly without having the exact gold_result data and performing calculations\n"
-            "- Each option must present a different mathematical transformation of the gold_result data\n"
-            "- All mathematical transformations used in the options must be meaningful within the context of the question—reflecting realistic operations or metrics commonly used in that domain (e.g., percentage growth, average rate, total cost)\n"
-            "- Every question must be an inference question requiring both gold_result data AND external knowledge\n"
-            "- Questions must be SINGLE CHOICE ONLY - exactly one correct answer per question\n\n"
+            "4) Answer Format (Single-choice)\n"
+            "• 4 options (A, B, C, D) with exactly 1 correct answer\n"
+            "• Distractors must be plausible and mutually exclusive\n"
+            f"• The correct answer must be option {correct_answer}\n\n"
 
-           
-            "Additional Requirements for single_choice_questions:\n"
-            "- Generate exactly 1 question\n"  
-            "- Avoid revealing specific gold_results number in the question!!!\n\n"
-            "- Design questions that require multi-step reasoning and cross-referencing between structured data, web insights, and vector database knowledge\n"
-            "- Each question should test the agent's ability to synthesize information from multiple sources and perform analytical jumps\n"
-            "- Create scenarios where agents must combine quantitative findings with qualitative external context to reach conclusions\n"
-            "- Avoid simple fact recall, direct data lookup, or surface-level comprehension questions\n"
-            "- Ensure the use of quantitative evidence in explanations is relevant, non-redundant, and directly supports the reasoning behind the answer.\n"
-            "- Ensure questions challenge the agent to demonstrate deep analytical thinking and cross-domain knowledge integration\n"
-            "- Questions must be SINGLE CHOICE ONLY - exactly one correct answer per question\n"
-            "  Return only valid JSON, no other text or explanation."
+            "Quality Checklist:\n"
+            "• Multi-source requirement verified (SQL + Web + Vector all necessary)\n"
+            "• Integration necessity confirmed (single-source solution is insufficient by design)\n"
+            "• Answer deterministic and verifiable (clear evidence path; reproducible from sources)\n"
+            "• Realistic scenario (domain-appropriate assumptions; no artificial constraints)\n"
+            "• No information leakage (prompt does not expose numeric results or final conclusions)\n"
+            "• Complete reasoning chain (all steps specified and source-aligned)\n\n"
+
+            "Return only valid JSON, no other text or explanation."
         )
     
     def _create_fallback_single_choice(self, original_query: str, gold_result: str, external_result: str, correct_answer: str = 'B') -> Dict:
@@ -441,19 +421,17 @@ class SingleChoiceGenerator:
             if not self.api_key:
                 self.logger.warning("Missing OPENROUTER_API_KEY, returning empty response")
                 return ""
-                
+
             import requests
-            
-            # Convert messages to OpenAI format
+
             openai_messages = []
             for msg in messages:
                 if isinstance(msg, dict):
                     if "role" in msg and "content" in msg:
                         openai_messages.append({"role": msg["role"], "content": msg["content"]})
                 else:
-                    # Handle HumanMessage-like objects
                     openai_messages.append({"role": "user", "content": str(msg)})
-            
+
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
                 headers={
@@ -461,18 +439,22 @@ class SingleChoiceGenerator:
                     "Content-Type": "application/json",
                 },
                 data=json.dumps({
-                    "model": "anthropic/claude-3.5-sonnet",
-                    "messages": openai_messages
+                    "model": "anthropic/claude-sonnet-4",
+                    "messages": openai_messages,
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "frequency_penalty": 0.3,
+                    "max_tokens": 3000
                 })
             )
-            
+
             if response.status_code == 200:
                 response_data = response.json()
                 if 'choices' in response_data and response_data['choices']:
                     return response_data['choices'][0]['message']['content'].strip()
-        
+
             return ""
-            
+
         except Exception as e:
             self.logger.error(f"LLM call with messages error: {e}")
             return ""
