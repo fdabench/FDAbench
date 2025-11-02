@@ -1,4 +1,4 @@
-#!/home/gong0092/miniconda3/envs/gong_env/bin/python
+#!/home/wang/miniconda3/envs/bench/bin/python
 # -*- coding: utf-8 -*-
 """
 External Tools Module - Web Search and Vector Database Tools with LLM Selection
@@ -76,10 +76,16 @@ class WebSearchTool(ExternalTool):
                 return "Web search unavailable: Missing OPENROUTER_API_KEY"
 
             # Huawei enterprise example from TechReport
-            huawei_example = """Enterprise Example 1 — Huawei Expense Reimbursement Compliance Review Data Agent
+            huawei_example = """Enterprise Example — Huawei Expense Reimbursement Compliance Review Data Agent:
 
-Huawei's Expense ERP Data Agent conducts intelligent compliance reviews: The reimbursement review data agent retrieves recent employee expense claim information from the relational database. Based on employee grade level and submission timing, it queries the vector database for applicable reimbursement policies. For each expense item, it cross-validates supporting documentation and transaction timestamps with regulatory and internal policy databases to ensure compliance. The agent then identifies anomalies, such as late submissions, over-claiming, or policy violations, and generates structured compliance summaries linking factual data, contextual reasoning, and policy evidence.
-"""
+Huawei's Expense ERP Data Agent conducts intelligent compliance reviews through heterogeneous data integration:
+• Structured Database Query: Retrieves recent employee expense claim information from the relational database including employee ID, grade level, expense amount, submission timestamp, expense category, and approval status. Executes aggregations to identify statistical patterns and outliers.
+• Vector Database Retrieval: Based on employee grade level and expense category, queries the vector database for applicable reimbursement policies. Retrieves relevant policy documents, compliance guidelines, historical precedents, and extracts allowable expense limits, required documentation, and approval workflows.
+• External Web Validation: Cross-validates supporting documentation and transaction timestamps with regulatory databases. Checks compliance with internal policy updates and external audit requirements. Verifies merchant information and transaction authenticity against external sources.
+• Heterogeneous Data Integration: SQL provides quantitative patterns (expense amounts, submission timing, approval rates). Vector database provides policy context (allowable limits, required documentation, compliance rules). Web sources provide validation (regulatory updates, merchant verification, audit trail).
+• Anomaly Detection: Identifies compliance issues including late submissions exceeding policy deadlines, over-claiming beyond grade-specific limits, missing or insufficient supporting documentation, and policy violations based on recent regulatory updates.
+
+This enterprise example demonstrates genuine heterogeneous data integration where no single source is sufficient."""
 
             prompt_content = f"""Context:
 • Original query: {query}

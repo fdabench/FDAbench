@@ -1,4 +1,4 @@
-#!/home/gong0092/miniconda3/envs/gong_env/bin/python
+#!/home/wang/miniconda3/envs/bench/bin/python
 # -*- coding: utf-8 -*-
 """
 Refactored Bird Dataset Build Script - Main Application
@@ -185,14 +185,13 @@ class GoldSubtaskManager:
 
 class SingleChoiceGenerator:
     """Handles single choice question generation with human feedback support"""
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         self.logger = logging.getLogger(__name__)
         self.conversation_history = []
-    
+
     def call_llm(self, prompt: str) -> str:
-        """Simple LLM call using OpenRouter with improved error handling"""
         try:
             if not self.api_key:
                 self.logger.warning("Missing OPENROUTER_API_KEY, returning empty response")
@@ -210,7 +209,6 @@ class SingleChoiceGenerator:
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7,
                     "top_p": 0.95,
-                    "frequency_penalty": 0.3,
                     "max_tokens": 3000
                 })
             )
@@ -229,12 +227,9 @@ class SingleChoiceGenerator:
     def generate_single_choice_content(self, original_query: str, subtask_results: Dict[str, SubtaskResult]) -> Dict:
         """Generate single choice questions using subtask results with random correct answer"""
         import random
-        
-        # Extract results from subtasks
+
         gold_result = subtask_results['gold_result'].result
         external_result = subtask_results['external_search'].result
-        
-        # Randomly select correct answer from all options
         correct_options = ['A', 'B', 'C', 'D']
         random_correct_answer = random.choice(correct_options)
         
@@ -244,28 +239,29 @@ class SingleChoiceGenerator:
             f"Web summary: {external_result}\n",
             "\n"
         ]
-        
-        # Get prompt template with randomized correct answer
+
         unified_prompt = "".join(prompt_parts) + self._get_prompt_template(random_correct_answer)
-        
-        # Add to conversation history
         self.conversation_history.append({"role": "user", "content": unified_prompt})
-        
+
         response = self.call_llm(unified_prompt)
-        
-        # Add response to conversation history
         self.conversation_history.append({"role": "assistant", "content": response})
-        
-        # Try to parse JSON response
+
         try:
-            result = json.loads(response)
+            cleaned_response = response.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            elif cleaned_response.startswith("```"):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            cleaned_response = cleaned_response.strip()
+
+            result = json.loads(cleaned_response)
             questions = result.get("single_choice_questions", [])
             
             if questions and len(questions) > 0:
                 question = questions[0]
-                # Validate question structure
                 if all(key in question for key in ["question", "options", "correct_answer", "explanation"]):
-                    # Ensure correct answer matches what we requested
                     if question.get("correct_answer") != [random_correct_answer]:
                         self.logger.info(f"Correcting answer from {question.get('correct_answer')} to [{random_correct_answer}]")
                         question["correct_answer"] = [random_correct_answer]
@@ -285,9 +281,9 @@ class SingleChoiceGenerator:
             return self._create_fallback_single_choice(original_query, gold_result, external_result, random_correct_answer)
     
     def _get_prompt_template(self, correct_answer: str = 'B') -> str:
-        """Get the prompt template for single choice generation with randomized correct answer"""
+        """Get the prompt template for single choice generation based on TechReport specifications"""
         return (
-            "Task Requirements:\n\n"
+            "Task Requirements (Based on FDABench Technical Report):\n\n"
 
             "1) Query Construction\n"
             "• Preserve the original analytical intent while extending scope to require heterogeneous data integration.\n"
@@ -297,19 +293,19 @@ class SingleChoiceGenerator:
             "• Avoid revealing numerical answers or conclusions within the question itself to prevent information leakage.\n\n"
 
             "2) Heterogeneous Integration Requirements\n"
-            "• Design the task so that it cannot be solved from any single data source. Each source must provide essential, non-redundant information.\n"
+            "• Design the task so that it CANNOT be solved from any single data source. Each source must provide essential, non-redundant information.\n"
             "• Structured Database (SQL): Provides quantitative evidence, precise metrics, temporal/categorical breakdowns, and statistical patterns.\n"
             "• Vector Database: Supplies theoretical frameworks, domain knowledge, conceptual models, technical specifications, and interpretive guidelines.\n"
             "• Web Search: Provides current events, regulatory updates, policy context, external validation, and real-world corroboration.\n"
             "• Ensure complementary roles: SQL answers 'what/how much,' Vector explains 'why/how to interpret,' Web validates 'current context/applicability.'\n\n"
 
             "3) Multi-Source Reasoning Chain\n"
-            "   a) SQL Execution: Identify required database tables, fields, aggregations, and constraints. Extract quantitative patterns without revealing numeric answers in the question.\n"
-            "   b) Vector Retrieval: Surface relevant theoretical frameworks, domain concepts, and interpretive guidelines that contextualize database findings.\n"
-            "   c) Web Search: Retrieve current events, policy updates, and external validation sources. Identify corroborating or contradictory information requiring resolution.\n"
-            "   d) Cross-Source Integration: Establish connections between SQL quantitative patterns, Vector conceptual frameworks, and Web contextual validation.\n"
-            "   e) Framework Application: Apply retrieved domain methodologies to reconcile information conflicts and establish causal interpretations.\n"
-            "   f) Synthesis: Produce evidence-backed conclusions integrating all three sources, with clear attribution and reasoning transparency.\n\n"
+            "1. SQL Execution: Identify required database tables, fields, aggregations, and constraints. Extract quantitative patterns without revealing numeric answers in the question.\n"
+            "2. Vector Retrieval: Surface relevant theoretical frameworks, domain concepts, and interpretive guidelines that contextualize database findings.\n"
+            "3. Web Search: Retrieve current events, policy updates, and external validation sources. Identify corroborating or contradictory information requiring resolution.\n"
+            "4. Cross-Source Integration: Establish connections between SQL quantitative patterns, Vector conceptual frameworks, and Web contextual validation.\n"
+            "5. Framework Application: Apply retrieved domain methodologies to reconcile information conflicts and establish causal interpretations.\n"
+            "6. Synthesis: Produce evidence-backed conclusions integrating all three sources, with clear attribution and reasoning transparency.\n\n"
 
             "4) Answer Format (Single-choice)\n"
             "• 4 options (A, B, C, D) with exactly 1 correct answer\n"
@@ -317,19 +313,27 @@ class SingleChoiceGenerator:
             f"• The correct answer must be option {correct_answer}\n\n"
 
             "Quality Checklist:\n"
-            "• Multi-source requirement verified (SQL + Web + Vector all necessary)\n"
-            "• Integration necessity confirmed (single-source solution is insufficient by design)\n"
-            "• Answer deterministic and verifiable (clear evidence path; reproducible from sources)\n"
-            "• Realistic scenario (domain-appropriate assumptions; no artificial constraints)\n"
-            "• No information leakage (prompt does not expose numeric results or final conclusions)\n"
-            "• Complete reasoning chain (all steps specified and source-aligned)\n\n"
+            "☐ Multi-source requirement verified (SQL + Web + Vector all necessary)\n"
+            "☐ Integration necessity confirmed (single-source solution is insufficient by design)\n"
+            "☐ Answer deterministic and verifiable (clear evidence path; reproducible from sources)\n"
+            "☐ Realistic scenario (domain-appropriate assumptions; no artificial constraints)\n"
+            "☐ No information leakage (prompt does not expose numeric results or final conclusions)\n"
+            "☐ Complete reasoning chain (all steps specified and source-aligned)\n\n"
 
+            "Output format: Return JSON with structure:\n"
+            "{\n"
+            '  "single_choice_questions": [{\n'
+            '    "question": "...",\n'
+            '    "options": {"A": "...", "B": "...", "C": "...", "D": "..."},\n'
+            f'    "correct_answer": ["{correct_answer}"],\n'
+            '    "explanation": "..."\n'
+            "  }]\n"
+            "}\n\n"
             "Return only valid JSON, no other text or explanation."
         )
     
     def _create_fallback_single_choice(self, original_query: str, gold_result: str, external_result: str, correct_answer: str = 'B') -> Dict:
         """Create fallback single choice question when generation fails with random correct answer"""
-        # Create options with the correct answer marked
         options = {
             "A": "Option A - Initial analysis approach",
             "B": "Option B - Alternative analytical approach",  
@@ -356,7 +360,6 @@ class SingleChoiceGenerator:
     
     def revise_content(self, feedback: str, conversation_history: List[Dict], current_question_data: Dict, original_query: str, gold_result: str, external_result: str) -> Dict:
         """Revise content based on feedback using unified approach like content_generators.py"""
-        # Build revision prompt following content_generators.py pattern
         revision_prompt = (
             f"Based on the feedback: {feedback}\n\n"
             "Please revise the previous response to address the feedback. "
@@ -443,7 +446,6 @@ class SingleChoiceGenerator:
                     "messages": openai_messages,
                     "temperature": 0.7,
                     "top_p": 0.95,
-                    "frequency_penalty": 0.3,
                     "max_tokens": 3000
                 })
             )
@@ -587,8 +589,8 @@ class SingleChoiceGenerator:
 
 class DatasetEntry:
     """Represents a single dataset entry"""
-    
-    def __init__(self, instance_id: str, db: str, level: str = "medium", 
+
+    def __init__(self, instance_id: str, db: str, level: str = None,
                  database_type: str = "bird"):
         self.instance_id = instance_id
         self.db = db
@@ -703,6 +705,35 @@ class BirdDatasetBuilder:
         
         print("\n" + "=" * 80)
     
+    def get_difficulty_vote(self) -> str:
+        """Get human expert difficulty vote"""
+        import sys
+
+        if not sys.stdin.isatty():
+            self.logger.warning("⚠️ Non-interactive environment detected, defaulting to medium difficulty")
+            return "medium"
+
+        print("\n📊 Difficulty Assessment:")
+        print("Based on FDABench criteria, please vote on the difficulty level:")
+        print("   (e) Easy - Straightforward question with clear intent, no external knowledge needed")
+        print("   (m) Medium - Requires interpretation and domain context")
+        print("   (h) Hard - Highly ambiguous, extensive theoretical frameworks needed")
+
+        while True:
+            try:
+                user_input = input("\n👤 Difficulty vote (e/m/h): ").strip().lower()
+                if user_input == 'e':
+                    return "easy"
+                elif user_input == 'm':
+                    return "medium"
+                elif user_input == 'h':
+                    return "hard"
+                else:
+                    print("❌ Invalid input. Please enter 'e', 'm', or 'h'.")
+            except (EOFError, KeyboardInterrupt):
+                self.logger.warning("⚠️ Input interrupted, defaulting to medium difficulty")
+                return "medium"
+
     def get_user_feedback(self) -> tuple:
         """Get user feedback and choice"""
         import sys
@@ -780,12 +811,11 @@ class BirdDatasetBuilder:
         instance_id = item.get("instance_id") or item.get("id") or str(idx)
         db = item.get("db_id") or item.get("db") or "SQLite"
         original_query = item.get("instruction") or item.get("question") or item.get("query") or ""
-        
+
         self.logger.info(f"🔄 Processing query {idx+1}: {instance_id}")
         total_start_time = time.time()
-        
+
         try:
-            # Execute all subtasks (smart tool selection)
             subtask_results = self.subtask_manager.execute_subtasks_concurrent(
                 instance_id, original_query, self.config["gold_result_dir"], self.config["sql_path"]
             )
@@ -835,16 +865,14 @@ class BirdDatasetBuilder:
             # Display results to user
             self.display_results(original_query, content_result, subtask_results, reflection)
             
-            # Get user feedback
             user_choice, feedback = self.get_user_feedback()
-            
+
             if user_choice == 'a':
-                # Accept and save
+                difficulty = self.get_difficulty_vote()
                 self.accepted_count += 1
-                return self._save_entry(item, content_result, subtask_results, start_time)
+                return self._save_entry(item, content_result, subtask_results, start_time, difficulty)
                 
             elif user_choice == 'd':
-                # Dispose - skip this item
                 self.disposed_count += 1
                 total_end_time = time.time()
                 self.logger.info(f"🗑️  Query {idx+1} disposed by user")
@@ -853,11 +881,11 @@ class BirdDatasetBuilder:
                 return True
                 
             elif user_choice == 'r':
-                # Revise based on feedback
                 if revision_count >= self.max_revisions:
                     print(f"\n⚠️  Maximum revisions ({self.max_revisions}) reached. Accepting current version.\n")
+                    difficulty = self.get_difficulty_vote()
                     self.accepted_count += 1
-                    return self._save_entry(item, content_result, subtask_results, start_time)
+                    return self._save_entry(item, content_result, subtask_results, start_time, difficulty)
                 
                 print(f"\n🔄 Revising content (attempt {revision_count + 1}/{self.max_revisions})...")
                 
@@ -885,8 +913,9 @@ class BirdDatasetBuilder:
                 revision_count += 1
         
         # If we exit the loop without accepting/disposing, save the last version
+        difficulty = self.get_difficulty_vote()
         self.accepted_count += 1
-        return self._save_entry(item, content_result, subtask_results, start_time)
+        return self._save_entry(item, content_result, subtask_results, start_time, difficulty)
     
     def _process_auto_mode(self, item: Dict, idx: int, subtask_results: Dict[str, SubtaskResult], start_time: float) -> bool:
         """Process query in automatic mode without human feedback"""
@@ -904,16 +933,14 @@ class BirdDatasetBuilder:
         self.accepted_count += 1
         return self._save_entry(item, content_result, subtask_results, start_time)
     
-    def _save_entry(self, item: Dict, content_result: Dict, subtask_results: Dict[str, SubtaskResult], start_time: float) -> bool:
+    def _save_entry(self, item: Dict, content_result: Dict, subtask_results: Dict[str, SubtaskResult], start_time: float, difficulty: str = None) -> bool:
         """Save the final entry to output"""
         try:
             instance_id = item.get("instance_id") or item.get("id") or "unknown"
             db = item.get("db_id") or item.get("db") or "SQLite"
             original_query = item.get("instruction") or item.get("question") or item.get("query") or ""
-            
-            # Create dataset entry
-            dataset_entry = DatasetEntry(instance_id, db)
-            # Get selected tool type from external search result
+
+            dataset_entry = DatasetEntry(instance_id, db, level=difficulty)
             selected_tool_type = getattr(subtask_results['external_search'], 'selected_tool_type', None)
             
             gold_subtasks = self.subtask_manager.build_gold_subtasks(
@@ -955,7 +982,7 @@ class BirdDatasetBuilder:
         self.logger.info(f"🚀 Starting Bird Medium Single Choice Dataset Build ({mode_text} Mode)")
         self.logger.info(f"📁 Output path: {self.config['output_path']}")
         self.logger.info("🧠 Using LLM-based smart tool selection")
-        
+
         if self.interactive_mode:
             self.logger.info(f"👤 Interactive mode enabled - Human review required for each item")
             self.logger.info(f"🔄 Maximum revisions per item: {self.max_revisions}")
