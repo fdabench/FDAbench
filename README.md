@@ -15,9 +15,15 @@
 
 ## Overview
 
-![FDABench Architecture](assets/overview.png)
+### Dataset Generation Pipeline
+![FDABench Architecture](assets/generation_loop.png)
 
 *FDABench provides a comprehensive framework for evaluating data agents across multiple dimensions including accuracy, latency, cost, and tool usage efficiency. The benchmark supports diverse agent architectures and integrates with various database systems and semantic operators.*
+
+### Data Agent System Architecture
+![FDABench System Architecture](assets/arch.png)
+
+*The system architecture demonstrates the integration of heterogeneous data sources, agent workflows, and evaluation metrics for comprehensive data agent benchmarking.*
 
 ## Key Features
 
