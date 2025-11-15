@@ -238,6 +238,34 @@ python examples/run_tooluse_agent.py --index 100
 # --model "model_name": Specify the LLM model to use
 ```
 
+### FDABench with DeepAnalyze
+
+We also provide a ready-to-run benchmarking script that connects DeepAnalyze to FDABench's tasks.
+
+1. Position the DeepAnalyze project alongside FDABench so the runtime layout looks like:
+   ```
+   /path/to/workspace/
+   ├── FDAbench/
+   └── DeepAnalyze/
+   ```
+2. Start the DeepAnalyze vLLM server and export its model path and endpoint (or pass them as CLI flags):
+   ```bash
+   export DEEPANALYZE_MODEL_PATH=/path/to/DeepAnalyze/model/DeepAnalyze-8B
+   export DEEPANALYZE_API_URL=http://localhost:8000/v1/chat/completions
+   ```
+3. Run the benchmark. By default the script pulls FDABench-Lite sample `index=0`, runs evaluation, and writes metrics to `results/test_query_results_deepanalyze.duckdb`:
+   ```bash
+   python FDABench/examples/test_deepanalyze_adapter.py \
+     --index 5 \
+     --max_agent_rounds 8 \
+     --max_deepanalyze_rounds 25
+   ```
+
+Useful flags:
+- `--input` load custom JSON/JSONL tasks instead of HuggingFace samples.
+- `--duckdb_path` specify a custom metrics file.
+- `--api_key` override the API key FDABench uses for auxiliary tools.
+
 #### Data Agent with Semantic Operator
 
 Data agents integrated with semantic data operators for advanced data processing:
