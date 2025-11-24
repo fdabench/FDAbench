@@ -323,6 +323,17 @@ All test results are automatically saved to:
 - `results/` - DuckDB files with test results and metrics
 - `FDABench/examples/data/` - Temporary processing files
 
+### Vector Index Building
+
+Build semantic search indices for `VectorSearchTool`:
+
+```bash
+# Set OPENAI_API_KEY in environment or .env file
+python -m FDABench.utils.vector_index_builder \
+    --doc-path /path/to/documents \
+    --index-path /path/to/indices
+```
+
 ## Agent-Expert Dataset Generation
 
 ### Start To Build Test Cases
