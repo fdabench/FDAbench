@@ -244,8 +244,8 @@ def main():
     parser.add_argument(
         '--index-path',
         type=str,
-        required=True,
-        help="Path to directory where indices will be saved"
+        default="./storage",
+        help="Path to directory where indices will be saved (default: ./storage from project root)"
     )
     parser.add_argument(
         '--chunk-size',

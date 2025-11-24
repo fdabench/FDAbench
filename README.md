@@ -323,16 +323,48 @@ All test results are automatically saved to:
 - `results/` - DuckDB files with test results and metrics
 - `FDABench/examples/data/` - Temporary processing files
 
-### Vector Index Building
+### Vector Index Building and Search
 
-Build semantic search indices for `VectorSearchTool`:
+The `VectorSearchTool` enables semantic search over unstructured documents (PDFs, images, audio, video).
+
+#### 1. Download Unstructured Data
+
+Download the unstructured dataset from [Google Drive](https://drive.google.com/file/d/1so5dvpB2aroy4NMaxh4FmnmGhGhPGvIs/view?usp=sharing) containing 52 domain categories with mixed media files. Extract to `../Vector_Database/` relative to project root.
+
+#### 2. Build Vector Indices
+
+**Important**: Run all commands from the project root directory to ensure path consistency.
 
 ```bash
-# Set OPENAI_API_KEY in environment or .env file
+# Navigate to project root
+cd /path/to/FDAbench
+
+# Set API key
+export OPENAI_API_KEY="your-openai-api-key"
+
+# Build indices (outputs to ./storage by default)
 python -m FDABench.utils.vector_index_builder \
-    --doc-path /path/to/documents \
-    --index-path /path/to/indices
+    --doc-path ../Vector_Database \
+    --chunk-size 1024 \
+    --skip-existing
 ```
+
+This creates indices at `./storage/[Category_Name]/` which `VectorSearchTool` uses by default.
+
+#### 3. Use VectorSearchTool
+
+```python
+from FDABench.tools.search_tools import VectorSearchTool
+
+# VectorSearchTool loads from ./storage by default (project root)
+vector_tool = VectorSearchTool()
+result = vector_tool.execute(query="Your question", top_k=5)
+```
+
+**Path Summary**: All paths relative to project root:
+- Unstructured data: `../Vector_Database/`
+- Built indices: `./storage/` (default, shared by builder and tool)
+- Run location: Project root (`/path/to/FDAbench`)
 
 ## Agent-Expert Dataset Generation
 
