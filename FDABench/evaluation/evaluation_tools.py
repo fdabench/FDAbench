@@ -6,9 +6,6 @@ from typing import Dict, List, Tuple, Union, Any
 import json
 import openai
 import os
-from collections import Counter
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
@@ -17,13 +14,10 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
 class ReportEvaluator:
     def __init__(self, openai_api_key: str = None):
-        # Initialize ROUGE scorer
+        # Initialize ROUGE scorer (use_stemmer=False for speed)
         self.latency= None
-        self.rouge_scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-        
-        # Initialize sentence transformer for semantic similarity
-        self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
-        
+        self.rouge_scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=False)
+
         # Initialize OpenRouter API
         if openai_api_key:
             self.openrouter_api_key = openai_api_key
@@ -133,24 +127,6 @@ class ReportEvaluator:
             'f1': f1
         }
 
-    def _calculate_semantic_similarity(self, text1: str, text2: str) -> float:
-        """
-        Calculate semantic similarity using sentence transformers.
-        
-        Formula:
-        similarity = cosine_similarity(embedding1, embedding2)
-        where embedding is the output of the transformer model
-        
-        Reference: Reimers, N., & Gurevych, I. (2019). Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks.
-        """
-        # Encode texts
-        embedding1 = self.sentence_transformer.encode([text1])[0]
-        embedding2 = self.sentence_transformer.encode([text2])[0]
-        
-        # Calculate cosine similarity
-        similarity = cosine_similarity([embedding1], [embedding2])[0][0]
-        return float(similarity)
-
     @staticmethod
     def _to_float(val):
         if isinstance(val, list):
@@ -174,147 +150,6 @@ class ReportEvaluator:
     #     """
     #     # RAGAS evaluation has been disabled to avoid LLM dependency
     #     return {}
-
-    def _calculate_answer_relevance(self, generated: str, ground_truth: str) -> float:
-        """
-        Calculate answer relevance score using semantic similarity.
-        
-        Formula:
-        Answer_Relevance = (1/n) * Σ max(similarity(s_i, t_j))
-        where s_i is a sentence in generated text
-        and t_j is a sentence in reference text
-        
-        Reference: Es, S., et al. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation.
-        """
-        # Split texts into sentences
-        def split_into_sentences(text: str) -> List[str]:
-            sentences = re.split(r'(?<=[.!?])\s+', text)
-            return [s.strip() for s in sentences if s.strip()]
-        
-        gen_sentences = split_into_sentences(generated)
-        truth_sentences = split_into_sentences(ground_truth)
-        
-        if not truth_sentences:
-            return 0.0
-        
-        # Calculate semantic similarity for each sentence pair
-        similarities = []
-        for truth_sent in truth_sentences:
-            max_sim = max(
-                self._calculate_semantic_similarity(truth_sent, gen_sent)
-                for gen_sent in gen_sentences
-            )
-            similarities.append(max_sim)
-        
-        # Return average similarity
-        return sum(similarities) / len(similarities)
-
-    def _calculate_context_relevance(self, generated: str, ground_truth: str) -> float:
-        """
-        Calculate context relevance using semantic similarity.
-        
-        Formula:
-        Context_Relevance = (1/n) * Σ max(similarity(c_i, d_j))
-        where c_i is a key concept in generated text
-        and d_j is a key concept in reference text
-        
-        Reference: Es, S., et al. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation.
-        """
-        # Extract key concepts using TF-IDF like approach
-        def extract_key_concepts(text: str) -> List[str]:
-            words = self._tokenize(text)
-            # Remove common stop words
-            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
-            words = [w for w in words if w not in stop_words and len(w) > 2]
-            
-            # Get word frequencies
-            word_freq = Counter(words)
-            
-            # Get top 20% most frequent words as key concepts
-            threshold = len(word_freq) * 0.2
-            key_concepts = [word for word, freq in word_freq.most_common(int(threshold))]
-            
-            return key_concepts
-
-        # Extract key concepts
-        gen_concepts = extract_key_concepts(generated)
-        truth_concepts = extract_key_concepts(ground_truth)
-        
-        if not truth_concepts:
-            return 0.0
-        
-        # Calculate semantic similarity for each concept pair
-        similarities = []
-        for truth_concept in truth_concepts:
-            max_sim = max(
-                self._calculate_semantic_similarity(truth_concept, gen_concept)
-                for gen_concept in gen_concepts
-            )
-            similarities.append(max_sim)
-        
-        # Return average similarity
-        return sum(similarities) / len(similarities)
-
-    def _calculate_faithfulness(self, generated: str, ground_truth: str) -> float:
-        """
-        Calculate faithfulness score using semantic similarity and fact extraction.
-        
-        Formula:
-        Faithfulness = (1/n) * Σ max(similarity(f_i, g_j))
-        where f_i is a fact in generated text
-        and g_j is a fact in reference text
-        
-        Reference: Es, S., et al. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation.
-        """
-        def extract_facts(text: str) -> List[str]:
-            facts = []
-            
-            # Extract statements with numbers and dates
-            number_facts = re.findall(r'\d+.*?(?=\.|\n)', text)
-            facts.extend(number_facts)
-            
-            # Extract statements with key indicators
-            key_indicators = ['because', 'due to', 'resulted in', 'led to', 'caused', 'impacted', 'affected', 
-                            'according to', 'based on', 'shows', 'indicates', 'demonstrates', 'reveals']
-            for indicator in key_indicators:
-                indicator_facts = re.findall(f'{indicator}.*?(?=\.|\n)', text)
-                facts.extend(indicator_facts)
-            
-            # Extract statements with comparative terms
-            comparative_terms = ['more than', 'less than', 'higher than', 'lower than', 'better than', 'worse than',
-                               'increased', 'decreased', 'improved', 'declined', 'grew', 'reduced']
-            for term in comparative_terms:
-                comparative_facts = re.findall(f'{term}.*?(?=\.|\n)', text)
-                facts.extend(comparative_facts)
-            
-            # Clean facts
-            cleaned_facts = []
-            for fact in facts:
-                fact = re.sub(r'\s+', ' ', fact).strip()
-                fact = re.sub(r'^(the|a|an)\s+', '', fact, flags=re.IGNORECASE)
-                if len(fact) > 10 and not fact.startswith(('and', 'or', 'but')):
-                    cleaned_facts.append(fact.lower())
-            
-            return cleaned_facts
-
-        # Extract facts
-        gen_facts = extract_facts(generated)
-        truth_facts = extract_facts(ground_truth)
-        
-        if not truth_facts:
-            return 0.0
-        
-        # Calculate semantic similarity for each fact pair
-        similarities = []
-        for truth_fact in truth_facts:
-            max_sim = max(
-                self._calculate_semantic_similarity(truth_fact, gen_fact)
-                for gen_fact in gen_facts
-            )
-            similarities.append(max_sim)
-        
-        # Return average similarity
-        return sum(similarities) / len(similarities)
 
     def _get_llm_judge_score(self, generated: str, ground_truth: str) -> float:
         """
@@ -405,21 +240,21 @@ Score:"""
         # Preprocess texts
         generated = self._preprocess_text(generated_report)
         ground_truth = self._preprocess_text(ground_truth_report)
-        
-        # Calculate all metrics (excluding RAGAS)
+
+        # Calculate all metrics (excluding RAGAS and LLM judge for speed)
         rouge_scores = self._calculate_rouge_scores(generated, ground_truth)
         precision_recall_f1 = self._calculate_precision_recall_f1(generated, ground_truth)
-        llm_score = self._get_llm_judge_score(generated, ground_truth)
+        # llm_score = self._get_llm_judge_score(generated, ground_truth)  # 注释掉LLM judge以加速
         bleu_score = self._calculate_bleu(generated, ground_truth)
-        
-        # Combine all scores (excluding RAGAS metrics)
+
+        # Combine all scores (excluding RAGAS metrics and LLM judge)
         evaluation_results = {
             **rouge_scores,
             **precision_recall_f1,
-            'llm_judge_score': llm_score,
+            # 'llm_judge_score': llm_score,  # 注释掉LLM judge以加速
             'bleu': bleu_score
         }
-        
+
         return evaluation_results
 
     def evaluate_batch(self, generated_reports: List[str], ground_truth_reports: List[str]) -> Dict[str, float]:
