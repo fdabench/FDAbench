@@ -43,6 +43,9 @@ dependencies = [
     "typing-extensions>=4.0.0",
     "beautifulsoup4>=4.11.0",
     "lxml>=4.9.0",
+    "faiss-cpu>=1.7.0",
+    "pdfplumber>=0.9.0",
+    "PyPDF2>=3.0.0",
 ]
 
 [project.optional-dependencies]

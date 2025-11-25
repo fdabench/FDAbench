@@ -325,15 +325,15 @@ All test results are automatically saved to:
 
 ### Vector Index Building and Search
 
-The `VectorSearchTool` enables semantic search over unstructured documents (PDFs, images, audio, video).
+The `VectorSearchTool` enables semantic search over unstructured documents using **FAISS + OpenAI Embeddings**.
 
 #### 1. Download Unstructured Data
 
-Download the unstructured dataset from [Google Drive](https://drive.google.com/file/d/1so5dvpB2aroy4NMaxh4FmnmGhGhPGvIs/view?usp=sharing) containing 52 domain categories with mixed media files. Extract to `../Vector_Database/` relative to project root.
+Download the unstructured dataset from [Google Drive](https://drive.google.com/file/d/1so5dvpB2aroy4NMaxh4FmnmGhGhPGvIs/view?usp=sharing) containing 50 domain categories with PDFs, images, and other files. Extract to your preferred location.
 
-#### 2. Build Vector Indices
+#### 2. Build Vector Index
 
-**Important**: Run all commands from the project root directory to ensure path consistency.
+The vector index builder uses **OpenAI's `text-embedding-3-small`** model and **FAISS** for efficient similarity search. All categories are merged into a single unified index.
 
 ```bash
 # Navigate to project root
@@ -342,29 +342,119 @@ cd /path/to/FDAbench
 # Set API key
 export OPENAI_API_KEY="your-openai-api-key"
 
-# Build indices (outputs to ./storage by default)
+# Build unified index from all categories
 python -m FDABench.utils.vector_index_builder \
-    --doc-path ../Vector_Database \
-    --chunk-size 1024 \
-    --skip-existing
+    --doc-path /path/to/Vector_Database \
+    --index-path ./storage \
+    --unified \
+    --chunk-size 1024
+
+# Or specify API key directly
+python -m FDABench.utils.vector_index_builder \
+    --doc-path /path/to/Vector_Database \
+    --index-path ./storage \
+    --unified \
+    --api-key "your-openai-api-key"
 ```
 
-This creates indices at `./storage/[Category_Name]/` which `VectorSearchTool` uses by default.
+**Builder Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--doc-path` | Path to document categories | Required |
+| `--index-path` | Where to save the index | `./storage` |
+| `--unified` | Merge all categories into one index | Flag |
+| `--chunk-size` | Text chunk size in characters | 1024 |
+| `--chunk-overlap` | Overlap between chunks | 200 |
+| `--skip-existing` | Skip if index exists | Flag |
+| `--api-key` | OpenAI API key | Uses `OPENAI_API_KEY` env |
 
-#### 3. Use VectorSearchTool
+**Features:**
+- Supports PDF files (via pdfplumber/PyPDF2)
+- 50 concurrent embedding requests for speed
+- Auto-truncation for long texts (max 30K chars)
+- Timeout handling for problematic PDFs (30s)
+- Skips failed chunks and continues
+
+#### 3. Index Storage Structure
+
+The index is saved to the specified `--index-path` directory:
+
+```
+./storage/
+├── faiss.index     # FAISS vector index
+├── chunks.json     # Text chunks with metadata
+└── config.json     # Index configuration
+```
+
+Each chunk in `chunks.json` contains:
+```json
+{
+  "id": "abc123",
+  "text": "chunk content...",
+  "metadata": {
+    "category": "Healthcare_Medical Systems",
+    "file_name": "paper.pdf",
+    "file_path": "/path/to/paper.pdf",
+    "file_type": ".pdf"
+  }
+}
+```
+
+#### 4. Use VectorSearchTool
 
 ```python
 from FDABench.tools.search_tools import VectorSearchTool
 
-# VectorSearchTool loads from ./storage by default (project root)
-vector_tool = VectorSearchTool()
-result = vector_tool.execute(query="Your question", top_k=5)
+# Initialize with index path
+vector_tool = VectorSearchTool(storage_path="./storage")
+
+# Or set API key explicitly
+vector_tool = VectorSearchTool(
+    storage_path="./storage",
+    api_key="your-openai-api-key"
+)
+
+# Search
+result = vector_tool.execute(query="machine learning in healthcare", top_k=5)
+
+if result["status"] == "success":
+    print(f"Found {result['num_results']} results")
+    print(result["results"])  # Formatted text output
+
+    # Access raw results with scores
+    for r in result["raw_results"]:
+        print(f"Score: {r['score']:.4f}")
+        print(f"Category: {r['metadata']['category']}")
+        print(f"Text: {r['text'][:200]}...")
 ```
 
-**Path Summary**: All paths relative to project root:
-- Unstructured data: `../Vector_Database/`
-- Built indices: `./storage/` (default, shared by builder and tool)
-- Run location: Project root (`/path/to/FDAbench`)
+**Search Output:**
+```
+[Rank 1] (Score: 0.6523)
+Category: Healthcare_Medical Systems | File: medical_ai.pdf
+Content: This paper presents a novel approach to...
+
+---
+[Rank 2] (Score: 0.5891)
+Category: Computer Vision | File: vision_health.pdf
+Content: Medical image analysis using deep learning...
+```
+
+#### 5. Requirements
+
+The vector search requires these dependencies (included in `pyproject.toml`):
+```
+faiss-cpu>=1.7.0
+pdfplumber>=0.9.0
+PyPDF2>=3.0.0
+openai>=1.0.0
+numpy>=1.21.0
+```
+
+Install with:
+```bash
+pip install faiss-cpu pdfplumber PyPDF2
+```
 
 ## Agent-Expert Dataset Generation
 
