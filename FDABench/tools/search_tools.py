@@ -119,7 +119,7 @@ class VectorSearchTool:
         """
         self.vector_db_config = vector_db_config or {}
         self.vector_search_function = vector_search_function
-        self.storage_path = storage_path or self.vector_db_config.get('storage_path', './storage')
+        self.storage_path = storage_path or self.vector_db_config.get('storage_path', './storage_faiss')
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
         # Lazy-loaded components
