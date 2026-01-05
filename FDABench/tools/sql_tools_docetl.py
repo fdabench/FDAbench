@@ -1,153 +1,188 @@
+"""
+DocETL-enhanced SQL tools for FDABench.
+
+This module provides SQL tools with DocETL semantic operator integration.
+It inherits base functionality from sql_tools and adds DocETL-specific processing.
+"""
 
 import json
 import logging
-import re
-from typing import Dict, List, Any, Optional
 import os
-import pandas as pd
-from docetl import DSLRunner
-import requests
 import tempfile
+from typing import Dict, List, Any, Tuple
+
+import pandas as pd
+import requests
 import yaml
+from docetl import DSLRunner
+
+from .sql_tools import (
+    SQLGenerationTool,
+    SQLOptimizationTool,
+    SQLDebugTool,
+    SQLExecutionTool as _BaseSQLExecutionTool,
+    extract_table_name_from_sql,
+    get_database_config,
+)
+
+__all__ = [
+    "SQLGenerationTool",
+    "SQLExecutionTool",
+    "SQLOptimizationTool",
+    "SQLDebugTool",
+    "choose_docetl_operator_with_llm",
+    "apply_docetl_operator",
+]
 
 logger = logging.getLogger(__name__)
 
-def extract_table_name_from_sql(sql_query: str) -> Optional[str]:
+
+# =============================================================================
+# DocETL-specific Helper Functions
+# =============================================================================
+
+def choose_docetl_operator_with_llm(
+    natural_language_query: str,
+    available_operators: List[str],
+    api_key: str
+) -> Tuple[str, Dict[str, int]]:
+    """Use LLM to choose the most appropriate DocETL operator.
+
+    Args:
+        natural_language_query: The user's query
+        available_operators: List of available operators
+        api_key: API key for OpenRouter
+
+    Returns:
+        Tuple of (operator_name, token_stats)
+    """
+    token_stats = {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0}
 
     try:
-        sql_clean = re.sub(r'\s+', ' ', sql_query.strip().upper())
-        
-        from_pattern = r'FROM\s+([^\s,\(\)]+)'
-        match = re.search(from_pattern, sql_clean)
-        
-        if match:
-            table_name = match.group(1).strip()
-            if '.' in table_name:
-                table_name = table_name.split('.')[-1]
-            return table_name.lower()
-        
-        return None
-    except Exception as e:
-        logger.error(f"Error extracting table name: {e}")
-        return None
+        supported_ops = ["map", "filter", "reduce", "resolve", "gather", "unnest"]
+        operators_to_consider = [op for op in supported_ops if op in available_operators]
 
-        
-  
-
-def choose_docetl_operator_with_llm(natural_language_query: str, available_operators: List[str], api_key: str) -> tuple[str, dict]:
-    token_stats = {
-        'input_tokens': 0,
-        'output_tokens': 0,
-        'total_tokens': 0
-    }
-    
-    try:
-        operators_to_consider = [op for op in available_operators if op in ["map", "filter"]]
-        
         prompt = f"""
-                Given the natural language query and available DocETL operators, choose the most appropriate operator.
+Given the natural language query and available DocETL operators, choose the most appropriate operator.
 
-                Natural Language Query: "{natural_language_query}"
+Natural Language Query: "{natural_language_query}"
 
-                Available DocETL Operators:
-                - map: Transform data by adding new columns or extracting information from each row (use only for explicit data transformation requests)
-                - filter: Filter rows based on conditions to keep only relevant data (use for analysis, queries, and data selection)
+Available DocETL Operators:
+- map: Transform/extract information from each row (adds new columns, extracts fields, computes derived values)
+- filter: Filter rows based on conditions (keeps rows that match criteria, removes irrelevant data)
+- reduce: Aggregate data across multiple rows (summarize, combine, compute totals/averages)
+- resolve: Deduplicate or merge similar records (entity resolution, data cleaning)
+- gather: Collect and organize information from multiple sources
+- unnest: Flatten nested data structures into individual rows
 
-                Guidelines:
-                1. Use "filter" for all analytical queries, questions, and data exploration tasks
-                2. Use "filter" for questions asking "what", "who", "how many", "which", "when", "where"
-                3. Use "filter" for summarization, insights, comparisons, finding patterns, or selecting data
-                4. Use "filter" for any query that involves examining, analyzing, or working with specific data
-                5. Use "map" ONLY when explicitly asked to "add columns", "transform data", "create new fields", or "modify existing data structure"
+Rules:
+1. Default to "filter" for most queries involving data analysis, questions, or information extraction
+2. Use "filter" for any query asking "what", "who", "how many", "which", "when", "where"
+3. Use "filter" for comparisons, finding patterns, or selecting specific data subsets
+4. Use "map" when explicitly asked to "add columns", "transform data", "extract fields", or "compute new values"
+5. Use "reduce" for aggregation tasks like "summarize", "total", "average", "combine all"
+6. Use "resolve" for deduplication or entity matching tasks
+7. Use "gather" for collecting information from multiple fields or sources
+8. Use "unnest" when dealing with nested/array data that needs flattening
 
-                Return ONLY the operator name: either "map" or "filter". No explanation needed.
-                """
-        
-        
+Return ONLY the operator name (e.g., "filter"). No explanation needed.
+"""
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
-        
         payload = {
             "model": "deepseek/deepseek-chat-v3-0324",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 10,
             "temperature": 0
         }
-        
+
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
             json=payload,
             timeout=30
         )
-        
+
         if response.status_code == 200:
             result = response.json()
             chosen_operator = result["choices"][0]["message"]["content"].strip().lower()
-            
+
             if 'usage' in result:
                 usage = result['usage']
-                token_stats['input_tokens'] = usage.get('prompt_tokens', token_stats['input_tokens'])
-                token_stats['output_tokens'] = usage.get('completion_tokens', token_stats['output_tokens'])
-                token_stats['total_tokens'] = usage.get('total_tokens', 
+                token_stats['input_tokens'] = usage.get('prompt_tokens', 0)
+                token_stats['output_tokens'] = usage.get('completion_tokens', 0)
+                token_stats['total_tokens'] = usage.get('total_tokens',
                     token_stats['input_tokens'] + token_stats['output_tokens'])
-            else:
-                logger.error("No usage data in API response")
-                token_stats['input_tokens'] = 0
-                token_stats['output_tokens'] = 0
-                token_stats['total_tokens'] = 0
-                
         else:
-            logger.error(f"OpenAI API call failed with status {response.status_code}: {response.text}")
+            logger.error(f"OpenRouter API failed: {response.status_code}: {response.text}")
             chosen_operator = None
-        
+
         if chosen_operator and chosen_operator in operators_to_consider:
             return chosen_operator, token_stats
-        else:
-            logger.warning(f"Invalid operator choice: {chosen_operator}, using fallback logic")
-            query_lower = natural_language_query.lower()
-            if any(word in query_lower for word in ["filter", "select only", "remove", "exclude", "show only"]):
-                return "filter", token_stats
-            else:
-                return "map", token_stats
-                
+
+        # Fallback logic
+        logger.warning(f"Invalid operator choice: {chosen_operator}, using fallback")
+        query_lower = natural_language_query.lower()
+        if any(word in query_lower for word in ["filter", "select only", "remove", "exclude", "show only"]):
+            return "filter", token_stats
+        elif any(word in query_lower for word in ["summarize", "aggregate", "total", "average", "combine"]):
+            return "reduce", token_stats
+        elif any(word in query_lower for word in ["deduplicate", "merge", "resolve", "match entities"]):
+            return "resolve", token_stats
+        elif any(word in query_lower for word in ["flatten", "unnest", "expand"]):
+            return "unnest", token_stats
+        return "filter", token_stats  # Default to filter for analysis
+
     except Exception as e:
         logger.error(f"Error choosing DocETL operator: {e}")
         return "map", token_stats
 
-def apply_docetl_operator(df: pd.DataFrame, operator: str, natural_language_query: str, 
-                         columns: List[str], api_key: str, token_tracker=None) -> pd.DataFrame:
+
+def apply_docetl_operator(
+    df: pd.DataFrame,
+    operator: str,
+    natural_language_query: str,
+    columns: List[str],
+    api_key: str,
+    token_tracker=None
+) -> pd.DataFrame:
+    """Apply DocETL operator to DataFrame.
+
+    Args:
+        df: Input DataFrame
+        operator: Operator type ("map" or "filter")
+        natural_language_query: The user's query
+        columns: List of column names
+        api_key: API key for OpenRouter
+        token_tracker: Optional token tracker
+
+    Returns:
+        Processed DataFrame
+    """
+    data_file_path = None
+    output_file_path = None
+    pipeline_file_path = None
+
     try:
-        data_rows_count = len(df)
-        
-        # Token counts will be tracked from actual API calls        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as data_file:
-            data_json = df.to_dict('records')
-            json.dump(data_json, data_file, indent=2)
-            data_file_path = data_file.name
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as output_file:
-            output_file_path = output_file.name
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as pipeline_file:
-            pipeline_file_path = pipeline_file.name
-        
+        # Create temp files
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(df.to_dict('records'), f, indent=2)
+            data_file_path = f.name
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            output_file_path = f.name
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            pipeline_file_path = f.name
+
+        # Build config based on operator
         if operator == "map":
-            config = {
-                "datasets": {
-                    "input_data": {
-                        "path": data_file_path,
-                        "type": "file"
-                    }
-                },
-                "default_model": "openrouter/deepseek/deepseek-chat-v3-0324",
-                "operations": [
-                    {
-                        "name": "analyze_data",
-                        "type": "map",
-                        "prompt": f"""
+            operation_config = {
+                "name": "analyze_data",
+                "type": "map",
+                "prompt": f"""
 Analyze this data record and answer the following query: "{natural_language_query}"
 
 Record data: {{{{ input }}}}
@@ -156,616 +191,197 @@ Based on the query, provide a relevant analysis, summary, or extracted informati
 If the query asks for specific information, extract and return that.
 If the query asks for analysis or insights, provide those.
 Return your response as a clear, concise answer.
-                        """.strip(),
-                        "output": {
-                            "schema": {
-                                "analysis_result": "str"
-                            }
-                        }
-                    }
-                ],
-                "pipeline": {
-                    "steps": [
-                        {
-                            "name": "process_data",
-                            "input": "input_data", 
-                            "operations": ["analyze_data"]
-                        }
-                    ],
-                    "output": {
-                        "type": "file",
-                        "path": output_file_path
-                    }
-                }
+""".strip(),
+                "output": {"schema": {"analysis_result": "str"}}
             }
-        
-        elif operator == "filter":
-            config = {
-                "datasets": {
-                    "input_data": {
-                        "path": data_file_path,
-                        "type": "file"
-                    }
-                },
-                "default_model": "openrouter/deepseek/deepseek-chat-v3-0324",
-                "operations": [
-                    {
-                        "name": "filter_data",
-                        "type": "filter",
-                        "prompt": f"""
+        else:  # filter
+            operation_config = {
+                "name": "filter_data",
+                "type": "filter",
+                "prompt": f"""
 Evaluate this data record against the following criteria: "{natural_language_query}"
 
 Record data: {{{{ input }}}}
 
 Return true if this record matches the criteria or should be included based on the query.
 Return false if this record should be filtered out or doesn't match the criteria.
-                        """.strip(),
-                        "output": {
-                            "schema": {
-                                "matches_criteria": "boolean"
-                            }
-                        }
-                    }
-                ],
-                "pipeline": {
-                    "steps": [
-                        {
-                            "name": "filter_data_step",
-                            "input": "input_data",
-                            "operations": ["filter_data"]
-                        }
-                    ],
-                    "output": {
-                        "type": "file", 
-                        "path": output_file_path
-                    }
-                }
+""".strip(),
+                "output": {"schema": {"matches_criteria": "boolean"}}
             }
-        
+
+        config = {
+            "datasets": {
+                "input_data": {"path": data_file_path, "type": "file"}
+            },
+            "default_model": "openrouter/deepseek/deepseek-chat-v3-0324",
+            "operations": [operation_config],
+            "pipeline": {
+                "steps": [{
+                    "name": f"{operator}_data_step",
+                    "input": "input_data",
+                    "operations": [operation_config["name"]]
+                }],
+                "output": {"type": "file", "path": output_file_path}
+            }
+        }
+
         with open(pipeline_file_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
-        
+
         os.environ['OPENROUTER_API_KEY'] = api_key
-        
+
         logger.info(f"Running DocETL {operator} operation...")
         runner = DSLRunner.from_yaml(pipeline_file_path)
         runner.load_run_save()
-        
+
         with open(output_file_path, 'r') as f:
             results = json.load(f)
-        
+
         if results:
             result_df = pd.DataFrame(results)
-            logger.info(f"DocETL {operator} operation completed successfully. Results shape: {result_df.shape}")
+            logger.info(f"DocETL {operator} completed. Results shape: {result_df.shape}")
             return result_df
-        else:
-            logger.warning(f"DocETL {operator} operation returned no results")
-            
-            
-            return pd.DataFrame()
-            
+
+        logger.warning(f"DocETL {operator} returned no results")
+        return pd.DataFrame()
+
     except Exception as e:
-        logger.error(f"Error applying DocETL {operator} operator: {e}")
+        logger.error(f"Error applying DocETL {operator}: {e}")
         return df
-    
+
     finally:
-        for temp_path in [data_file_path, output_file_path, pipeline_file_path]:
-            try:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-            except Exception as e:
-                logger.warning(f"Could not clean up temp file {temp_path}: {e}")
-
-
-class SQLExecutionTool:
-    
-    def __init__(self, db_manager=None, token_tracker=None):
-        self.db_manager = db_manager
-        self.available_operators = ["map", "filter"]
-    
-    def execute(self, sql_query: str = None, database_name: str = None,
-                database_type: str = None, instance_id: str = None,
-                natural_language_query: str = None, previous_results: Dict = None,
-                **kwargs) -> Dict[str, Any]:
-      
-        try:
-            if not sql_query and previous_results:
-                for tool_name in ["sql_generate", "generated_sql"]:
-                    if tool_name in previous_results:
-                        result = previous_results[tool_name]
-                        if isinstance(result, dict) and "sql_query" in result:
-                            sql_query = result["sql_query"]
-                            break
-            
-            if not sql_query:
-                return {"status": "error", "error": "No SQL query provided"}
-            
-            table_name = extract_table_name_from_sql(sql_query)
-            if table_name:
-                modified_sql = f"SELECT * FROM {table_name}"
-                logger.info(f"Modified SQL from complex query to: {modified_sql}")
-                sql_to_execute = modified_sql
-            else:
-                sql_to_execute = sql_query
-
-            if self.db_manager and database_name and database_type:
+        for path in [data_file_path, output_file_path, pipeline_file_path]:
+            if path and os.path.exists(path):
                 try:
-                    try:
-                        from ..utils.database_connection_manager import DatabaseConfig
-                    except ImportError:
-                        from dataclasses import dataclass
-                        @dataclass
-                        class DatabaseConfig:
-                            database_type: str
-                            instance_id: str
-                            db_name: str
-                            connection_params: Dict[str, Any] = None
-                    
-                    if hasattr(self.db_manager, 'get_database_config') and instance_id:
-                        config = self.db_manager.get_database_config(instance_id, database_name, database_type)
-                    else:
-                        config = DatabaseConfig(
-                            database_type=database_type,
-                            instance_id=instance_id or "default",
-                            db_name=database_name
-                        )
-                    
-                    execution_result = self.db_manager.execute_sql(config, sql_to_execute)
-                    
-                    if execution_result["status"] == "success":
-                        if natural_language_query:
-                            try:
-                                api_key = os.environ.get('OPENROUTER_API_KEY')
-                                if not api_key:
-                                    logger.error("OPENROUTER_API_KEY not found, DocETL processing will fail")
-                                    raise ValueError("Missing OPENROUTER_API_KEY")
-
-                                query_results = execution_result["results"]["query_results"]
-                                columns = execution_result["results"].get("columns", [])
-                                
-                                if query_results and columns:
-                                    df = pd.DataFrame(query_results, columns=columns)
-                                    logger.info(f"Created DataFrame with shape: {df.shape}")
-                                    
-                                    chosen_operator = choose_docetl_operator_with_llm(
-                                        natural_language_query, 
-                                        self.available_operators, 
-                                        api_key
-                                    )
-                                    
-                                    logger.info(f"LLM chose DocETL operator: {chosen_operator}")
-                                    
-                                    processed_df = apply_docetl_operator(
-                                        df, chosen_operator, natural_language_query, columns, api_key
-                                    )
-                                    if isinstance(processed_df, pd.DataFrame):
-                                        processed_results = processed_df.to_dict('records')
-                                    else:
-                                        processed_results = processed_df
-                                    
-                                    logger.info(f"Processed results count: {len(processed_results) if isinstance(processed_results, list) else 'N/A'}")
-                                    table_name = extract_table_name_from_sql(sql_query)
-
-                                    return {
-                                        "status": "success",
-                                        "results": {
-                                            "original_sql_query": sql_query,
-                                            "executed_sql_query": sql_to_execute,
-                                            "query_results": processed_results,
-                                            "total_results_count": len(processed_results) if isinstance(processed_results, list) else 1,
-                                            "original_count": execution_result["results"]["total_results_count"],
-                                            "database_name": database_name,
-                                            "database_type": database_type,
-                                            "instance_id": instance_id,
-                                            "columns": columns,
-                                            "table_name": table_name,
-                                            "docetl_operator_used": chosen_operator,
-                                            "processed_by_docetl": True
-                                        }
-                                    }
-                                        
-                            except Exception as e:
-                                logger.error(f"DocETL processing failed, returning original results: {e}")
-                    
-                    if execution_result["status"] == "success":
-                        table_name = extract_table_name_from_sql(sql_query)
-                        return {
-                            "status": "success",
-                            "results": {
-                                "original_sql_query": sql_query,
-                                "executed_sql_query": sql_to_execute,
-                                "query_results": execution_result["results"]["query_results"],
-                                "total_results_count": execution_result["results"]["total_results_count"],
-                                "database_name": database_name,
-                                "database_type": database_type,
-                                "instance_id": instance_id,
-                                "columns": execution_result["results"].get("columns", []),
-                                "table_name": table_name,
-                                "processed_by_docetl": False
-                            }
-                        }
-                    else:
-                        return {
-                            "status": "error",
-                            "error": f"Database execution failed: {execution_result.get('error', 'Unknown error')}"
-                        }
-                        
+                    os.unlink(path)
                 except Exception as e:
-                    logger.error(f"Database manager execution failed: {e}")
-                    return {
-                        "status": "error",
-                        "error": f"Database execution failed: {str(e)}"
-                    }
-            
-            error_msg = "SQL execution failed due to missing parameters"
-            if not self.db_manager:
-                error_msg = "Database manager is not available for SQL execution"
-            elif not database_name:
-                error_msg = "Database name is required for SQL execution"
-            elif not database_type:
-                error_msg = "Database type is required for SQL execution"
-            
-            logger.error(f"SQL execution failed: {error_msg}")
-            return {
-                "status": "error", 
-                "error": error_msg
-            }
-            
-        except Exception as e:
-            logger.error(f"SQL execution failed: {str(e)}")
-            return {"status": "error", "error": str(e)}
+                    logger.warning(f"Could not clean up {path}: {e}")
 
-class SQLGenerationTool:
-    
-    def __init__(self, llm_client=None, db_manager=None):
-        self.llm_client = llm_client
-        self.db_manager = db_manager
-    
-    def execute(self, natural_language_query: str, database_name: str = None, 
-                database_type: str = None, instance_id: str = None,
-                schema_info: Dict = None, **kwargs) -> Dict[str, Any]:
-        """
-        Generate SQL query from natural language.
-        
+
+# =============================================================================
+# DocETL-enhanced SQL Execution Tool
+# =============================================================================
+
+class SQLExecutionTool(_BaseSQLExecutionTool):
+    """SQL execution tool enhanced with DocETL semantic operators.
+
+    Inherits base SQL execution and adds DocETL post-processing for
+    semantic filtering and transformation of query results.
+    """
+
+    AVAILABLE_OPERATORS = ["map", "filter", "reduce", "resolve", "gather", "unnest"]
+
+    def __init__(self, db_manager=None, token_tracker=None):
+        super().__init__(db_manager)
+        self.token_tracker = token_tracker
+
+    def execute(
+        self,
+        sql_query: str = None,
+        database_name: str = None,
+        database_type: str = None,
+        instance_id: str = None,
+        natural_language_query: str = None,
+        previous_results: Dict = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute SQL with optional DocETL semantic processing.
+
         Args:
-            natural_language_query: The query in natural language
-            database_name: Target database name
-            database_type: Type of database (bird, spider2-lite, etc.)
-            instance_id: Instance identifier for database connection
-            schema_info: Database schema information (optional)
-            **kwargs: Additional parameters
-            
+            sql_query: SQL query to execute
+            database_name: Target database
+            database_type: Type of database
+            instance_id: Instance identifier
+            natural_language_query: Original NL query (triggers DocETL if provided)
+            previous_results: Results from previous tools
+
         Returns:
             Dictionary with status and results
         """
         try:
-            if not natural_language_query:
-                return {"status": "error", "error": "No natural language query provided"}
-            
-            if not schema_info and self.db_manager and database_name:
-                try:
-                    try:
-                        from ..utils.database_connection_manager import DatabaseConfig
-                    except ImportError:
-                        from dataclasses import dataclass
-                        @dataclass
-                        class DatabaseConfig:
-                            database_type: str
-                            instance_id: str
-                            db_name: str
-                            connection_params: Dict[str, Any] = None
-                    
-                    if database_type and instance_id:
-                        if hasattr(self.db_manager, 'get_database_config'):
-                            config = self.db_manager.get_database_config(instance_id, database_name, database_type)
-                        else:
-                            config = DatabaseConfig(
-                                database_type=database_type,
-                                instance_id=instance_id,
-                                db_name=database_name
-                            )
-                        schema_result = self.db_manager.get_schema_info(config)
-                        if "error" not in schema_result:
-                            schema_info = schema_result
-                except Exception as e:
-                    logger.warning(f"Could not retrieve schema info: {e}")
-            
-            prompt_parts = [
-                f'Given the following database schema for the {database_type or "unknown"} database "{database_name}":',
-                ''
-            ]
-            
-            if schema_info:
-                prompt_parts.append(f"Schema:\n{json.dumps(schema_info, indent=2)}")
-            else:
-                prompt_parts.append("Schema: Not available")
-            
-            prompt_parts.extend([
-            '',
-            f'Based *only* on this schema and the user\'s request, generate a single, valid SQL query to answer the following:',
-            f'User Request: "{natural_language_query}"',
-            '',
-            'STRICT OUTPUT RULES:',
-            '- Output MUST be only one SQL query',
-            '- Do NOT include explanations, comments, markdown formatting, or text outside SQL',
-            '- Do NOT include triple backticks (```), just return raw SQL',
-            '- If the query cannot be answered with the schema, output exactly: QUERY_IMPOSSIBLE',
-            '',
-            'SQL RULES:',
-            '- Only use tables and columns listed in the schema',
-            '- Ensure correct SQL syntax for the database type',
-            '- For JSON fields in BigQuery, use proper JSON functions',
-            '- For SQLite JSON fields, use json_extract() function',
-            '- If database type is BigQuery, always use full path from bigquery-public-data',
-            '- Generate queries that return comprehensive datasets (avoid unnecessary LIMIT clauses)',
-            '- Include all relevant columns useful for analysis',
-            '',
-            'Final check: If your output contains anything other than pure SQL, replace it entirely with QUERY_IMPOSSIBLE.'
-        ])
-            
-            prompt = "\n".join(prompt_parts)
-            
-            if self.llm_client and hasattr(self.llm_client, 'call_llm'):
-                try:
-                    generated_sql = self.llm_client.call_llm(
-                        [{"role": "user", "content": prompt}], 
-                        category="sql_generate"
-                    ).strip()
-                    generated_sql = generated_sql.replace('```sql', '').replace('```', '').strip()
-                    
-                    if generated_sql == "QUERY_IMPOSSIBLE":
-                        return {"status": "error", 
-                                "error": f"Query cannot be answered based on the provided {schema_info}."}
-                    
-                    mock_sql = generated_sql
-                except Exception as e:
-                    logger.error(f"LLM SQL generation failed: {e}")
-                    return {"status": "error", "error": f"LLM SQL generation failed: {str(e)}"}
-            else:
-                return {"status": "error", "error": "LLM client not available or does not have call_llm method"}
-            
-            if not mock_sql or mock_sql.strip() == "" or "ERROR" in mock_sql.upper():
-                return {"status": "error", "error": "Failed to generate valid SQL query"}
-            
-            return {
-                "status": "success",
-                "results": {
-                    "sql_query": mock_sql,
-                    "database_name": database_name,
-                    "database_type": database_type,
-                    "instance_id": instance_id,
-                    "original_query": natural_language_query,
-                    "schema_used": schema_info is not None
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"SQL generation failed: {str(e)}")
-            return {"status": "error", "error": str(e)}
-    
-
-
-class SQLOptimizationTool:
-    
-    def __init__(self, llm_client=None, db_manager=None):
-        self.llm_client = llm_client
-        self.db_manager = db_manager
-    
-    def execute(self, sql_query: str, db_name: str = None, 
-                database_type: str = None, instance_id: str = None,
-                schema_info: Dict = None, **kwargs) -> Dict[str, Any]:
-        try:
+            # Resolve SQL query
+            sql_query = self._resolve_sql_query(sql_query, previous_results, **kwargs)
             if not sql_query:
                 return {"status": "error", "error": "No SQL query provided"}
-            
-            if not schema_info and self.db_manager and db_name and database_type:
+
+            # For DocETL, simplify complex queries to SELECT *
+            table_name = extract_table_name_from_sql(sql_query)
+            original_sql = sql_query
+            if table_name:
+                sql_query = f"SELECT * FROM {table_name}"
+                logger.info(f"Simplified SQL for DocETL: {sql_query}")
+
+            # Execute base SQL
+            result = self._execute_sql_query(sql_query, database_name, database_type, instance_id)
+            if result["status"] != "success":
+                return {"status": "error", "error": f"Database execution failed: {result.get('error')}"}
+
+            query_results = result["query_results"]
+            columns = result["columns"]
+
+            # Apply DocETL processing if NL query provided
+            if natural_language_query and query_results and columns:
                 try:
-                    try:
-                        from ..utils.database_connection_manager import DatabaseConfig
-                    except ImportError:
-                        from dataclasses import dataclass
-                        @dataclass
-                        class DatabaseConfig:
-                            database_type: str
-                            instance_id: str
-                            db_name: str
-                            connection_params: Dict[str, Any] = None
-                    
-                    if hasattr(self.db_manager, 'get_database_config') and instance_id:
-                        config = self.db_manager.get_database_config(instance_id, db_name, database_type)
-                    else:
-                        config = DatabaseConfig(
-                            database_type=database_type,
-                            instance_id=instance_id or "default",
-                            db_name=db_name
-                        )
-                    schema_result = self.db_manager.get_schema_info(config)
-                    if "error" not in schema_result:
-                        schema_info = schema_result
-                except Exception as e:
-                    logger.warning(f"Could not retrieve schema info for optimization: {e}")
-            
-            if self.llm_client and hasattr(self.llm_client, 'call_llm'):
-                try:
-                    prompt = f"""
-Given the following database schema and SQL query, optimize the query for better performance:
+                    api_key = os.environ.get('OPENROUTER_API_KEY')
+                    if not api_key:
+                        raise ValueError("Missing OPENROUTER_API_KEY")
 
-Database Schema:
-{json.dumps(schema_info, indent=2) if schema_info else "Not available"}
+                    df = pd.DataFrame(query_results, columns=columns)
+                    logger.info(f"Created DataFrame: {df.shape}")
 
-Original SQL Query:
-{sql_query}
+                    chosen_operator, token_stats = choose_docetl_operator_with_llm(
+                        natural_language_query, self.AVAILABLE_OPERATORS, api_key
+                    )
+                    logger.info(f"DocETL operator: {chosen_operator}")
 
-Please optimize this query considering:
-1. Index usage
-2. Join order
-3. Subquery optimization
-4. WHERE clause optimization
-5. SELECT column optimization
-6. Database-specific optimizations for {database_type or "generic SQL"}
+                    processed_df = apply_docetl_operator(
+                        df, chosen_operator, natural_language_query, columns, api_key, self.token_tracker
+                    )
 
-Return ONLY the optimized SQL query. If no optimization is possible, return the original query.
-"""
-                    optimized_sql = self.llm_client.call_llm(
-                        [{"role": "user", "content": prompt}], 
-                        category="sql_optimize"
-                    ).strip()
-                    optimized_sql = optimized_sql.replace('```sql', '').replace('```', '').strip()
-                    
-                    optimization_notes = "Query optimized using LLM analysis"
-                except Exception as e:
-                    logger.error(f"LLM optimization failed: {e}")
-                    return {"status": "error", "error": f"LLM optimization failed: {str(e)}"}
-            else:
-                return {"status": "error", "error": "LLM client not available for optimization"}
-            
-            return {
-                "status": "success",
-                "results": {
-                    "original_query": sql_query,
-                    "optimized_query": optimized_sql,
-                    "optimization_notes": optimization_notes,
-                    "database_type": database_type,
-                    "instance_id": instance_id,
-                    "schema_used": schema_info is not None
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"SQL optimization failed: {str(e)}")
-            return {"status": "error", "error": str(e)}
+                    processed_results = (
+                        processed_df.to_dict('records')
+                        if isinstance(processed_df, pd.DataFrame)
+                        else processed_df
+                    )
 
-
-class SQLDebugTool:
-    
-    def __init__(self, llm_client=None, db_manager=None):
-        self.llm_client = llm_client
-        self.db_manager = db_manager
-    
-    def execute(self, failed_sql: str, error: str, database_name: str = None,
-                database_type: str = None, instance_id: str = None,
-                natural_language_query: str = None, schema_info: Dict = None,
-                **kwargs) -> Dict[str, Any]:
-        try:
-            if not failed_sql:
-                return {"status": "error", "error": "No SQL query provided for debugging"}
-            
-            if not schema_info and self.db_manager and database_name and database_type:
-                try:
-                    try:
-                        from ..utils.database_connection_manager import DatabaseConfig
-                    except ImportError:
-                        from dataclasses import dataclass
-                        @dataclass
-                        class DatabaseConfig:
-                            database_type: str
-                            instance_id: str
-                            db_name: str
-                            connection_params: Dict[str, Any] = None
-                    
-                    if hasattr(self.db_manager, 'get_database_config') and instance_id:
-                        config = self.db_manager.get_database_config(instance_id, database_name, database_type)
-                    else:
-                        config = DatabaseConfig(
-                            database_type=database_type,
-                            instance_id=instance_id or "default",
-                            db_name=database_name
-                        )
-                    schema_result = self.db_manager.get_schema_info(config)
-                    if "error" not in schema_result:
-                        schema_info = schema_result
-                except Exception as e:
-                    logger.warning(f"Could not retrieve schema info for debugging: {e}")
-            
-            if self.llm_client and hasattr(self.llm_client, 'call_llm'):
-                try:
-                    prompt = f"""
-Given the following information:
-1. Database Schema:
-{json.dumps(schema_info, indent=2) if schema_info else "Not available"}
-
-2. Original Natural Language Query:
-{natural_language_query or "Not provided"}
-
-3. Failed SQL Query:
-{failed_sql}
-
-4. Error Message:
-{error}
-
-Please analyze the error and generate a corrected SQL query that will work correctly.
-Consider:
-1. Syntax errors
-2. Table/column name mismatches
-3. Data type issues
-4. Missing or incorrect joins
-5. Incorrect function usage
-6. Database-specific syntax for {database_type or "generic SQL"}
-
-Return ONLY the corrected SQL query. If you cannot fix the query, return "QUERY_UNFIXABLE".
-"""
-                    corrected_sql = self.llm_client.call_llm(
-                        [{"role": "user", "content": prompt}], 
-                        category="sql_debug"
-                    ).strip()
-                    corrected_sql = corrected_sql.replace('```sql', '').replace('```', '').strip()
-                    
-                    if corrected_sql == "QUERY_UNFIXABLE":
-                        return {
-                            "status": "error",
-                            "error": "Unable to fix the SQL query based on the error message"
-                        }
-                    
-                    if self.db_manager and database_name and database_type:
-                        try:
-                            execution_tool = SQLExecutionTool(self.db_manager)
-                            execution_result = execution_tool.execute(
-                                sql_query=corrected_sql,
-                                database_name=database_name,
-                                database_type=database_type,
-                                instance_id=instance_id
-                            )
-                            
-                            if execution_result["status"] == "success":
-                                return {
-                                    "status": "success",
-                                    "results": {
-                                        "original_query": failed_sql,
-                                        "corrected_query": corrected_sql,
-                                        "error_analysis": f"LLM analyzed and fixed error: {error}",
-                                        "fix_description": "Query corrected using LLM analysis",
-                                        "execution_results": execution_result["results"],
-                                        "database_type": database_type,
-                                        "instance_id": instance_id
-                                    }
-                                }
-                            else:
-                                return {
-                                    "status": "error",
-                                    "error": f"Corrected query still failed: {execution_result.get('error', 'Unknown error')}"
-                                }
-                        except Exception as e:
-                            logger.warning(f"Could not test corrected query: {e}")
-                    
                     return {
                         "status": "success",
                         "results": {
-                            "original_query": failed_sql,
-                            "corrected_query": corrected_sql,
-                            "error_analysis": f"LLM analyzed and fixed error: {error}",
-                            "fix_description": "Query corrected using LLM analysis",
+                            "original_sql_query": original_sql,
+                            "executed_sql_query": sql_query,
+                            "query_results": processed_results,
+                            "total_results_count": len(processed_results) if isinstance(processed_results, list) else 1,
+                            "original_count": result["total_results_count"],
+                            "database_name": database_name,
                             "database_type": database_type,
                             "instance_id": instance_id,
-                            "note": "Corrected query not tested due to unavailable database manager"
+                            "columns": columns,
+                            "table_name": table_name,
+                            "docetl_operator_used": chosen_operator,
+                            "processed_by_docetl": True
                         }
                     }
-                    
+
                 except Exception as e:
-                    logger.error(f"LLM debug failed: {e}")
-                    return {"status": "error", "error": f"LLM debug failed: {str(e)}"}
-            else:
-                return {"status": "error", "error": "LLM client not available for debugging"}
-            
+                    logger.error(f"DocETL processing failed, returning original: {e}")
+
+            # Return unprocessed results
+            return {
+                "status": "success",
+                "results": {
+                    "original_sql_query": original_sql,
+                    "executed_sql_query": sql_query,
+                    "query_results": query_results,
+                    "total_results_count": result["total_results_count"],
+                    "database_name": database_name,
+                    "database_type": database_type,
+                    "instance_id": instance_id,
+                    "columns": columns,
+                    "table_name": table_name,
+                    "processed_by_docetl": False
+                }
+            }
+
         except Exception as e:
-            logger.error(f"SQL debug failed: {str(e)}")
+            logger.error(f"SQL execution failed: {str(e)}")
             return {"status": "error", "error": str(e)}
