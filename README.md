@@ -1,12 +1,6 @@
 # FDABench
-<div align="left" style="line-height: 1;">
-  <a href="https://www.python.org/downloads/" target="_blank"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg"/></a>
-  <a href="https://opensource.org/licenses/MIT" target="_blank"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"/></a>
-  <a href="https://arxiv.org/pdf/2509.02473" target="_blank"><img alt="arXiv" src="https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg"/></a>
-  <a href="https://fdabench.github.io/" target="_blank"><img alt="Leaderboard" src="https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8?color=00ADD8&logoColor=white"/></a>
-  <a href="https://huggingface.co/datasets/FDAbench2026/FDAbench-Full" target="_blank"><img alt="Hugging Face Full" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-FDAbench--Full-ffc107?color=ffc107&logoColor=white"/></a>
-  <a href="https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite" target="_blank"><img alt="Hugging Face Lite" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-FDAbench--Lite-ffc107?color=ffc107&logoColor=white"/></a>
-</div>
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473) [![Leaderboard](https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8)](https://fdabench.github.io/) [![HF Full](https://img.shields.io/badge/🤗-FDAbench--Full-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) [![HF Lite](https://img.shields.io/badge/🤗-FDAbench--Lite-ffc107)](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite)
 
 ## 📰 News
 
@@ -16,15 +10,16 @@
 
 ## Overview
 
-### Dataset Generation Pipeline
-![FDABench Architecture](assets/generation_loop.png)
-
-*FDABench provides a comprehensive framework for evaluating data agents across multiple dimensions including accuracy, latency, cost, and tool usage efficiency. The benchmark supports diverse agent architectures and integrates with various database systems and semantic operators.*
-
-### Data Agent System Architecture
-![FDABench System Architecture](assets/arch.png)
-
-*The system architecture demonstrates the integration of heterogeneous data sources, agent workflows, and evaluation metrics for comprehensive data agent benchmarking.*
+<table>
+<tr>
+<td width="50%"><b>Dataset Generation Pipeline</b></td>
+<td width="50%"><b>Data Agent System Architecture</b></td>
+</tr>
+<tr>
+<td><img src="assets/generation_loop.png" alt="Generation Pipeline"/></td>
+<td><img src="assets/arch.png" alt="System Architecture"/></td>
+</tr>
+</table>
 
 ## Key Features
 
