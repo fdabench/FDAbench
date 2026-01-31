@@ -232,7 +232,7 @@ JSON:"""
         if subtask.tool in ["schema_understanding", "get_schema_info"]:
             params["database_name"] = query.db
             
-        elif subtask.tool in ["sql_generate", "generated_sql"]:
+        elif subtask.tool in ["sql_generate", "generated_sql", "generate_sql"]:
             params["natural_language_query"] = query.advanced_query or query.query or query.original_query
             params["database_name"] = query.db
             # Pass schema info if available from previous subtasks
@@ -259,7 +259,7 @@ JSON:"""
             
             # Also try alternative tool names
             if not sql_query:
-                for alt_tool in ["sql_generate", "sql_gen"]:
+                for alt_tool in ["sql_generate", "sql_gen", "generate_sql"]:
                     if alt_tool in self.tool_results:
                         sql_result = self.tool_results[alt_tool]
                         if isinstance(sql_result, dict):
@@ -278,11 +278,11 @@ JSON:"""
                 # Pass the entire tool_results as previous_results for the tool to handle
                 params["previous_results"] = self.tool_results.copy()
                     
-        elif subtask.tool in ["web_context_search", "perplexity_search"]:
+        elif subtask.tool in ["web_context_search", "perplexity_search", "web_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
-            
-        elif subtask.tool == "vectorDB_search":
+
+        elif subtask.tool in ["vectorDB_search", "vector_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
             

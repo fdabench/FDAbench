@@ -148,6 +148,7 @@ class BaseAgent:
             from ..tools.optimization_tools import QueryOptimizationTool, PerformanceTool
             
             self.register_tool("generated_sql", SQLGenerationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Generate SQL queries from natural language")
+            self.register_tool("generate_sql", SQLGenerationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Generate SQL queries")
             self.register_tool("execute_sql", SQLExecutionTool(db_manager=self.db_manager), category="sql", description="Execute SQL queries against databases")
             self.register_tool("sql_optimize", SQLOptimizationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Optimize SQL queries for better performance")
             self.register_tool("sql_debug", SQLDebugTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Debug and fix SQL query issues")
@@ -156,7 +157,9 @@ class BaseAgent:
             self.register_tool("schema_understanding", SchemaInspectionTool(), category="schema", description="Understand database structure")
             
             self.register_tool("web_context_search", WebSearchTool(api_key=self.api_key), category="search", description="Search web for context information")
+            self.register_tool("web_search", WebSearchTool(api_key=self.api_key), category="search", description="Search web for information")
             self.register_tool("vectorDB_search", VectorSearchTool(), category="search", description="Search vector database for similar content")
+            self.register_tool("vector_search", VectorSearchTool(), category="search", description="Search vector database")
             
             self.register_tool("file_system_search", FileSystemSearchTool(), category="file", description="Search file system for relevant files")
             self.register_tool("context_history", ContextHistoryTool(), category="context", description="Manage conversation context and history")
