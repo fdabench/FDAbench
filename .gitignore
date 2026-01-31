@@ -143,3 +143,13 @@ assets/*.pdf
 
 # Results
 results/
+
+# Anthropic API test file (contains credentials)
+dataset_build/test_anthropic_api.py
+
+# Internal documentation (not for public)
+docs/internal/
+
+# JSON test result files
+test_*.json
+*_result.json

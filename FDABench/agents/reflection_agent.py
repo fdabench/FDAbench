@@ -3,6 +3,8 @@ Reflection Agent implementation for FDABench Package.
 
 This agent uses a reflection-based approach to iteratively improve its performance
 by analyzing and reflecting on its actions and results.
+
+Supports DAG-based execution through DAGExecutionMixin for flexible task graph structures.
 """
 
 import os
@@ -14,6 +16,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from ..core.base_agent import BaseAgent, Query, Subtask
+from ..core.dag_execution_mixin import DAGExecutionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -27,41 +30,46 @@ class ReflectionResult:
     status: str = "completed"  # "completed", "improved", "failed"
 
 
-class ReflectionAgent(BaseAgent):
+class ReflectionAgent(DAGExecutionMixin, BaseAgent):
     """
     Reflection Agent that uses iterative reflection to improve performance.
-    
+
     Core Pattern: Reflection-based improvement through:
     1. Execute action
     2. Observe result
     3. Reflect on the action and result
     4. Improve action if needed
     5. Continue until task completion
-    
+
     This agent maintains a history of actions and reflections to learn
     from past decisions and improve future performance.
+
+    Supports DAG-based execution for flexible task graph structures.
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  model: str = "claude-sonnet-4-20250514",
                  api_base: str = "https://openrouter.ai/api/v1",
                  api_key: str = None,
                  max_steps: int = 7,
-                 max_reflections: int = 1):
+                 max_reflections: int = 1,
+                 enable_dag: bool = False):
         """
         Initialize ReflectionAgent.
-        
+
         Args:
             model: LLM model to use
             api_key: API key for the LLM service
             max_steps: Maximum number of steps to execute
             max_reflections: Maximum number of reflections per action
+            enable_dag: Enable DAG-based execution mode
         """
         super().__init__(model, api_base, api_key)
-        
+
         self.max_steps = max_steps
         self.max_reflections = max_reflections
-        
+        self.enable_dag = enable_dag
+
         # Reflection tracking
         self.history = []
         self.actions = []
@@ -72,7 +80,10 @@ class ReflectionAgent(BaseAgent):
         self.current_query = None
         self.reflection_count_per_query = 0  # Track reflections per query
         self.max_reflections_per_query = 1   # Limit reflections per query to 1 for extreme token efficiency
-        
+
+        # Initialize DAG execution mixin
+        self.init_dag_execution()
+
         # Simple cache for repeated actions
         self.action_cache = {}
     

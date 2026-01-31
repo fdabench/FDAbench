@@ -1,9 +1,12 @@
 """
 Planning Agent implementation for FDABench Package.
 
-This agent follows the "Planning" pattern where tasks are planned automatically 
-based on the query and then executed in sequence. The agent breaks down complex 
+This agent follows the "Planning" pattern where tasks are planned automatically
+based on the query and then executed in sequence. The agent breaks down complex
 queries into structured subtasks and executes them systematically.
+
+Now supports DAG-based execution through DAGExecutionMixin for more flexible
+task graph structures with alternative paths and parallel execution.
 """
 
 import os
@@ -15,6 +18,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
 from ..core.base_agent import BaseAgent, Query, Subtask
+from ..core.dag_execution_mixin import DAGExecutionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -30,53 +34,62 @@ class SubtaskExecutionResult:
     execution_time: float = 0.0
 
 
-class PlanningAgent(BaseAgent):
+class PlanningAgent(DAGExecutionMixin, BaseAgent):
     """
     Planning Agent that automatically generates and executes subtask plans.
-    
+
     Core Pattern: Automatic planning and execution:
     1. Generate a plan of subtasks based on the query
     2. Execute subtasks in sequence with smart ordering
     3. Use results from previous subtasks to inform later ones
     4. Generate final response based on accumulated results
-    
+
     The agent uses intelligent planning to break down complex queries into
     manageable subtasks and executes them systematically.
+
+    Now supports DAG-based execution for more flexible task graph structures
+    with alternative paths, parallel execution, and comprehensive evaluation.
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  model: str = "claude-sonnet-4-20250514",
                  api_base: str = "https://openrouter.ai/api/v1",
                  api_key: str = None,
                  max_planning_steps: int = 6,
-                 max_execution_time: int = 30):
+                 max_execution_time: int = 30,
+                 enable_dag: bool = False):
         """
         Initialize PlanningAgent.
-        
+
         Args:
             model: LLM model to use
             api_key: API key for the LLM service
             max_planning_steps: Maximum number of subtasks to plan
             max_execution_time: Maximum execution time in seconds
+            enable_dag: Enable DAG-based execution mode
         """
         super().__init__(model, api_base, api_key)
-        
+
         self.max_planning_steps = max_planning_steps
         self.max_execution_time = max_execution_time
-        
+        self.enable_dag = enable_dag
+
         # Planning and execution tracking
         self.completed_subtasks = set()
         self.tools_executed = []
         self.current_query = None
         self.start_time = None
-        
+
         # Performance optimization caches
         self._db_config_cache = {}
         self._schema_cache = {}
-        
+
         # Ensure tool_results is initialized
         if not hasattr(self, 'tool_results'):
             self.tool_results = {}
+
+        # Initialize DAG execution mixin
+        self.init_dag_execution()
     
     def plan_tasks(self, query: Query) -> List[Subtask]:
         """
@@ -477,7 +490,7 @@ JSON:"""
             # Prepare gold_subtasks for Query object (required for initialization)
             gold_subtasks = []
             if 'gold_subtasks' in query_data:
-                # Fix missing input fields in subtasks
+                # Fix missing fields in subtasks
                 for subtask in query_data['gold_subtasks']:
                     if 'input' not in subtask:
                         # Provide default input based on tool type
@@ -492,8 +505,22 @@ JSON:"""
                             subtask['input'] = {"database_name": query_data.get('db', '')}
                         else:
                             subtask['input'] = {}
-                
-                gold_subtasks = [Subtask(**s) for s in query_data['gold_subtasks']]
+                    # Provide default description if missing
+                    if 'description' not in subtask:
+                        subtask['description'] = f"Execute {subtask['tool']}"
+                    # Map expected_output to expected_result/expected_SQL
+                    if 'expected_output' in subtask:
+                        if subtask['tool'] in ['generate_sql', 'generated_sql']:
+                            subtask['expected_SQL'] = subtask.pop('expected_output')
+                        else:
+                            subtask['expected_result'] = subtask.pop('expected_output')
+
+                # Only keep valid Subtask fields
+                valid_fields = {'subtask_id', 'tool', 'input', 'description', 'expected_result', 'expected_SQL'}
+                gold_subtasks = [
+                    Subtask(**{k: v for k, v in s.items() if k in valid_fields})
+                    for s in query_data['gold_subtasks']
+                ]
             
             # Filter known fields (exclude gold_subtasks from agent access)
             known_fields = {
@@ -676,7 +703,197 @@ JSON:"""
                 "error": str(e),
                 "processing_time": time.strftime("%Y-%m-%d %H:%M:%S")
             }
-    
+
+    def process_query_with_dag(self, query_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a query using DAG-based execution.
+
+        This method provides enhanced execution with DAG support, including:
+        - Flexible task graph execution with alternative paths
+        - Parallel execution where possible
+        - Comprehensive tracking for DAG evaluation
+
+        Args:
+            query_data: Query data from JSON
+
+        Returns:
+            Processing results with DAG execution data
+        """
+        start_time = time.time()
+        self.start_time = start_time
+
+        try:
+            # Prepare gold_subtasks for Query object
+            gold_subtasks = []
+            if 'gold_subtasks' in query_data:
+                for subtask in query_data['gold_subtasks']:
+                    if 'input' not in subtask:
+                        if subtask['tool'] == 'get_schema_info':
+                            subtask['input'] = {"database_name": query_data.get('db', '')}
+                        elif subtask['tool'] == 'generated_sql':
+                            subtask['input'] = {
+                                "natural_language_query": query_data.get('query', ''),
+                                "database_name": query_data.get('db', '')
+                            }
+                        elif subtask['tool'] == 'execute_sql':
+                            subtask['input'] = {"database_name": query_data.get('db', '')}
+                        else:
+                            subtask['input'] = {}
+                gold_subtasks = [Subtask(**s) for s in query_data['gold_subtasks']]
+
+            # Filter known fields
+            known_fields = {
+                'instance_id', 'db', 'database_type', 'tools_available',
+                'query', 'advanced_query', 'original_query', 'ground_truth_report',
+                'multiple_choice_questions', 'level', 'question_type', 'options',
+                'correct_answer', 'explanation'
+            }
+
+            filtered_data = {k: v for k, v in query_data.items() if k in known_fields}
+            filtered_data['gold_subtasks'] = gold_subtasks
+            query = Query(**filtered_data)
+
+            # Reset state
+            self.reset_state()
+            self.completed_subtasks.clear()
+            self.tools_executed.clear()
+            self.current_query = query
+
+            if not hasattr(self, 'tool_results'):
+                self.tool_results = {}
+
+            logger.info(f"Processing DAG query {query.instance_id}: {query.database_type}")
+
+            # Load or create DAG
+            if 'gold_dag' in query_data:
+                self.load_dag(query_data)
+            else:
+                # Create DAG from gold_subtasks or template
+                self.create_dag_for_query(query_data)
+
+            # Start DAG execution
+            self.start_dag_execution()
+
+            # === DECISION phase: Task planning with DAG ===
+            with self.phase_timing('decision', 'dag_planning'):
+                # Use DAG-based planning instead of LLM planning
+                executable_nodes = self.get_next_executable_nodes()
+                logger.info(f"DAG has {len(self._current_dag.nodes)} nodes, {len(executable_nodes)} initially executable")
+
+            # === EXECUTE phase: Execute DAG nodes ===
+            subtask_results = {}
+            while not self.is_dag_complete():
+                executable = self.get_next_executable_tools()
+
+                if not executable:
+                    logger.warning("No more executable nodes but DAG not complete")
+                    break
+
+                # Check if we can parallelize (for future enhancement)
+                can_parallel = self.can_execute_parallel([node_id for node_id, _, _ in executable])
+
+                for node_id, tool_name, input_params in executable:
+                    with self.phase_timing('execute', f'dag_node_{node_id}'):
+                        # Create a subtask from the DAG node
+                        subtask = Subtask(
+                            subtask_id=node_id,
+                            tool=tool_name,
+                            input=input_params,
+                            description=f"Execute DAG node {node_id}"
+                        )
+
+                        # Execute the subtask
+                        result = self._execute_subtask(subtask, query)
+                        subtask_results[node_id] = result
+
+                        if result.status == 'success':
+                            self.completed_subtasks.add(node_id)
+                            self.tools_executed.append(result.tool_name)
+                            if hasattr(result, 'results') and result.results:
+                                self.tool_results[tool_name] = result.results
+                            self.mark_node_complete(node_id, result.results, result.execution_time)
+                            logger.info(f"Completed DAG node: {node_id} ({tool_name})")
+                        else:
+                            self.mark_node_failed(node_id, result.error or "Unknown error", result.execution_time)
+                            logger.warning(f"Failed DAG node: {node_id} ({tool_name}): {result.error}")
+
+                # Check time limit
+                if time.time() - start_time > self.max_execution_time:
+                    logger.warning("Max execution time reached")
+                    break
+
+            # === GENERATE phase: Generate final response ===
+            with self.phase_timing('generate', 'response_generation'):
+                if query.question_type == "multiple_choice":
+                    response = self._generate_multiple_choice_answer(query)
+                elif query.question_type == "single_choice":
+                    response = self._generate_single_choice_answer(query)
+                else:
+                    response = self.generate_report(query)
+
+            # Finish DAG execution and get data
+            dag_execution_data = self.finish_dag_execution()
+
+            # Calculate metrics
+            end_time = time.time()
+            total_latency = end_time - start_time
+            total_tool_execution_time = sum(
+                result.execution_time
+                for result in subtask_results.values()
+                if hasattr(result, 'execution_time')
+            )
+            external_latency = total_latency - total_tool_execution_time
+            token_summary = self.token_tracker.get_token_summary()
+
+            return {
+                "instance_id": query.instance_id,
+                "database_type": query.database_type,
+                "db_name": query.db,
+                "query": query.advanced_query or query.query,
+                "level": getattr(query, 'level', ''),
+                "question_type": getattr(query, 'question_type', ''),
+                "model": self.model,
+                "response": response,
+                "selected_answer": response if query.question_type in ["multiple_choice", "single_choice"] else None,
+                "report": response if query.question_type not in ["multiple_choice", "single_choice"] else None,
+                "correct_answer": getattr(query, 'correct_answer', None),
+                "subtask_results": {
+                    subtask_id: {
+                        "status": result.status,
+                        "tool": result.tool_name,
+                        "execution_time": result.execution_time,
+                        "error": result.error
+                    } for subtask_id, result in subtask_results.items()
+                },
+                "metrics": {
+                    "latency_seconds": round(total_latency, 2),
+                    "total_tool_execution_time": round(total_tool_execution_time, 2),
+                    "external_latency": round(external_latency, 2),
+                    "completed_subtasks": len(self.completed_subtasks),
+                    "total_subtasks": len(self._current_dag.nodes) if self._current_dag else 0,
+                    "success_rate": len(self.completed_subtasks) / len(self._current_dag.nodes) if self._current_dag and self._current_dag.nodes else 0,
+                    "tools_executed": self.tools_executed,
+                    "token_summary": token_summary,
+                    **self.get_phase_results()['phase_columns']
+                },
+                # DAG execution data for evaluation
+                "dag_execution": dag_execution_data,
+                "phase_statistics": self.get_phase_results()['phase_summary'],
+                "phase_distribution": self.get_phase_results()['phase_distribution'],
+                "processing_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time))
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing DAG query: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "instance_id": query_data.get("instance_id", "unknown"),
+                "model": self.model,
+                "error": str(e),
+                "processing_time": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+
     def generate_report(self, query: Query) -> str:
         """Generate report based on tool results, following the same format as ground truth reports"""
         

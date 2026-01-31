@@ -2,8 +2,10 @@
 Multi-Agent implementation for FDABench Package.
 
 This agent uses a multi-agent architecture with specialized expert agents and
-a coordinator agent that orchestrates their collaboration. Uses the tool registry 
+a coordinator agent that orchestrates their collaboration. Uses the tool registry
 system for loose coupling and follows the package structure standards.
+
+Supports DAG-based execution through DAGExecutionMixin for flexible task graph structures.
 """
 
 import time
@@ -13,6 +15,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
 from ..core.base_agent import BaseAgent, Query, Subtask
+from ..core.dag_execution_mixin import DAGExecutionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -70,51 +73,59 @@ class CommunicationSession:
     status: str = "active"  # "active", "completed", "failed"
 
 
-class MultiAgent(BaseAgent):
+class MultiAgent(DAGExecutionMixin, BaseAgent):
     """
     Multi-agent system using coordinator pattern with specialized expert agents.
-    
+
     Core Pattern: Intelligent multi-agent coordination using:
     1. Coordinator agent that analyzes all subtasks and plans expert actions
     2. Specialized expert agents (SQL, Web, Vector, Schema, etc.)
     3. Blackboard-style state sharing between agents
     4. Tool registry system for loose coupling - tools are registered separately
     5. Expert actions executed based on priority and dependencies
-    
+
     This agent demonstrates advanced agent coordination patterns while using
     the tool registry system for modularity and reusability.
+
+    Supports DAG-based execution for flexible task graph structures.
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  model: str = "claude-sonnet-4-20250514",
-                 api_base: str = "https://openrouter.ai/api/v1", 
+                 api_base: str = "https://openrouter.ai/api/v1",
                  api_key: str = None,
                  max_experts: int = 6,
-                 max_execution_time: int = 60):
+                 max_execution_time: int = 60,
+                 enable_dag: bool = False):
         """
         Initialize MultiAgent.
-        
+
         Args:
             model: LLM model to use
             api_key: API key for the LLM service
             max_experts: Maximum number of expert actions to execute
             max_execution_time: Maximum execution time in seconds
+            enable_dag: Enable DAG-based execution mode
         """
         super().__init__(model, api_base, api_key)
-        
+
         self.max_experts = max_experts
         self.max_execution_time = max_execution_time
-        
+        self.enable_dag = enable_dag
+
         # Multi-agent state
         self.state = MultiAgentState()
         self.current_query = None
         self.start_time = None
-        
+
+        # Initialize DAG execution mixin
+        self.init_dag_execution()
+
         # Expert communication system
         self.communication_sessions: Dict[str, CommunicationSession] = {}
         self.expert_messages: List[ExpertMessage] = []
         self.communication_history: List[Dict[str, Any]] = []
-        
+
         # Expert types mapping to tools they can handle
         self.expert_types = {
             'sql': ['sql_generate', 'sql_execute', 'get_schema_info', 'generated_sql', 'execute_sql', 'generate_sql'],

@@ -4,6 +4,8 @@ Tool Use Agent implementation for FDABench Package.
 This agent dynamically selects and executes tools based on available tools in the query,
 following the "Tool Use" pattern where tools are selected intelligently.
 Uses the tool registry system for loose coupling.
+
+Supports DAG-based execution through DAGExecutionMixin for flexible task graph structures.
 """
 
 import os
@@ -14,6 +16,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
 from ..core.base_agent import BaseAgent, Query, Subtask
+from ..core.dag_execution_mixin import DAGExecutionMixin
 
 logger = logging.getLogger(__name__)
 
@@ -28,46 +31,54 @@ class ToolExecutionResult:
     execution_time: float = 0.0
 
 
-class ToolUseAgent(BaseAgent):
+class ToolUseAgent(DAGExecutionMixin, BaseAgent):
     """
     Tool Use Agent that dynamically selects and executes tools.
-    
+
     Core Pattern: Intelligent tool selection based on:
     1. Available tools in the query
     2. Current context and previous tool results
     3. Smart ordering (schema -> sql_generate -> sql_execute -> search)
     4. Early termination when sufficient information is gathered
-    
+
     This agent uses the tool registry system for loose coupling - tools are
     registered separately and can be reused across different agent types.
+
+    Supports DAG-based execution for flexible task graph structures.
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  model: str = "claude-sonnet-4-20250514",
                  api_base: str = "https://openrouter.ai/api/v1",
                  api_key: str = None,
                  max_tools: int = 6,
-                 max_execution_time: int = 30):
+                 max_execution_time: int = 30,
+                 enable_dag: bool = False):
         """
         Initialize ToolUseAgent.
-        
+
         Args:
             model: LLM model to use
             api_key: API key for the LLM service
             max_tools: Maximum number of tools to execute
             max_execution_time: Maximum execution time in seconds
+            enable_dag: Enable DAG-based execution mode
         """
         super().__init__(model, api_base, api_key)
-        
+
         self.max_tools = max_tools
         self.max_execution_time = max_execution_time
-        
+        self.enable_dag = enable_dag
+
         # Tool execution tracking
         self.tools_executed = []
         self.tools_attempted = []
         self.current_query = None
         self.start_time = None
-        
+
+        # Initialize DAG execution mixin
+        self.init_dag_execution()
+
         # Note: Tools are registered externally via tool registry
         # This agent doesn't create tools, it uses registered ones
     

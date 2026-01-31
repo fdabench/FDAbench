@@ -274,6 +274,85 @@ def create_query_row(
     return {k: v for k, v in base_row.items() if k in ALL_COLUMNS}
 
 
+def create_dag_query_row(
+    result: Dict[str, Any],
+    test_data: Dict[str, Any],
+    evaluation_scores: Dict[str, float],
+    tool_recall_metrics: Dict[str, Any],
+    dag_evaluation: Dict[str, Any],
+    task_name: str,
+    pattern: str,
+    ground_truth_report: str = ""
+) -> Dict[str, Any]:
+    """
+    Create a comprehensive row for pandas DataFrame with DAG evaluation metrics.
+
+    This extends create_query_row to include DAG-specific evaluation fields.
+
+    Args:
+        result: Agent processing result
+        test_data: Original test data
+        evaluation_scores: Evaluation metrics
+        tool_recall_metrics: Tool recall metrics
+        dag_evaluation: DAG evaluation metrics (from DAGEvaluator)
+        task_name: Generated task name
+        pattern: Agent pattern name
+        ground_truth_report: Ground truth report text
+
+    Returns:
+        Dictionary representing a DataFrame row with DAG metrics
+    """
+    # Get base row from create_query_row
+    base_row = create_query_row(
+        result=result,
+        test_data=test_data,
+        evaluation_scores=evaluation_scores,
+        tool_recall_metrics=tool_recall_metrics,
+        task_name=task_name,
+        pattern=pattern,
+        ground_truth_report=ground_truth_report,
+    )
+
+    # Add DAG evaluation metrics
+    if dag_evaluation:
+        # Graph coverage metrics
+        base_row['dag_required_node_coverage'] = dag_evaluation.get('dag_required_node_coverage', 0.0)
+        base_row['dag_critical_path_coverage'] = dag_evaluation.get('dag_critical_path_coverage', 0.0)
+        base_row['dag_optional_node_coverage'] = dag_evaluation.get('dag_optional_node_coverage', 0.0)
+        base_row['dag_alt_group_satisfaction'] = dag_evaluation.get('dag_alt_group_satisfaction', '{}')
+
+        # Tool use quality metrics
+        base_row['dag_tool_recall'] = dag_evaluation.get('dag_tool_recall', 0.0)
+        base_row['dag_tool_precision'] = dag_evaluation.get('dag_tool_precision', 0.0)
+        base_row['dag_tool_f1'] = dag_evaluation.get('dag_tool_f1', 0.0)
+        base_row['dag_param_accuracy'] = dag_evaluation.get('dag_param_accuracy', 0.0)
+        base_row['dag_sequence_sanity'] = dag_evaluation.get('dag_sequence_sanity', 1.0)
+
+        # Detail fields
+        base_row['dag_completed_nodes'] = dag_evaluation.get('dag_completed_nodes', '[]')
+        base_row['dag_missed_required_nodes'] = dag_evaluation.get('dag_missed_required_nodes', '[]')
+        base_row['dag_extra_nodes'] = dag_evaluation.get('dag_extra_nodes', '[]')
+        base_row['dag_dep_violations'] = dag_evaluation.get('dag_dep_violations', '[]')
+        base_row['dag_execution_order'] = dag_evaluation.get('dag_execution_order', '[]')
+
+        # Composite score
+        base_row['dag_composite_score'] = dag_evaluation.get('dag_composite_score', 0.0)
+    else:
+        # Fill with default values if no DAG evaluation
+        for col in DAG_COLUMNS:
+            if col.endswith('_coverage') or col.endswith('_recall') or col.endswith('_precision') or \
+               col.endswith('_f1') or col.endswith('_accuracy') or col.endswith('_score'):
+                base_row[col] = 0.0
+            elif col == 'dag_sequence_sanity':
+                base_row[col] = 1.0
+            elif col.endswith('_satisfaction'):
+                base_row[col] = '{}'
+            else:
+                base_row[col] = '[]'
+
+    return {k: v for k, v in base_row.items() if k in ALL_COLUMNS}
+
+
 def store_in_duckdb(df: pd.DataFrame, duckdb_path: str, task_name: str) -> bool:
     """
     Store DataFrame in DuckDB with error handling and statistics
@@ -703,5 +782,48 @@ ALL_COLUMNS = [
     
     # 四阶段延迟细节字段
     'decision_avg_latency', 'execute_avg_latency', 'retry_avg_latency', 'generate_avg_latency',
-    'decision_max_latency', 'execute_max_latency', 'retry_max_latency', 'generate_max_latency'
+    'decision_max_latency', 'execute_max_latency', 'retry_max_latency', 'generate_max_latency',
+
+    # DAG评测字段 - Graph Coverage
+    'dag_required_node_coverage',      # Float: 必需节点完成率
+    'dag_critical_path_coverage',      # Float: 关键路径完成率
+    'dag_optional_node_coverage',      # Float: 可选节点完成率
+    'dag_alt_group_satisfaction',      # JSON: Dict[group_id, bool] OR分支满足情况
+
+    # DAG评测字段 - Tool Use Quality
+    'dag_tool_recall',                 # Float: 该调的工具是否都调了
+    'dag_tool_precision',              # Float: 避免乱调工具堆砌
+    'dag_tool_f1',                     # Float: F1 score
+    'dag_param_accuracy',              # Float: 参数是否正确
+    'dag_sequence_sanity',             # Float: 是否违反hard_dep (0 or 1)
+
+    # DAG评测字段 - Details
+    'dag_completed_nodes',             # JSON: List[str] 完成的节点
+    'dag_missed_required_nodes',       # JSON: List[str] 缺失的必需节点
+    'dag_extra_nodes',                 # JSON: List[str] 额外的节点
+    'dag_dep_violations',              # JSON: List[(node, missing_dep)] 依赖违反
+    'dag_execution_order',             # JSON: List[str] 执行顺序
+
+    # DAG评测字段 - Composite
+    'dag_composite_score',             # Float: 加权综合分数
+]
+
+
+# DAG specific columns for easy reference
+DAG_COLUMNS = [
+    'dag_required_node_coverage',
+    'dag_critical_path_coverage',
+    'dag_optional_node_coverage',
+    'dag_alt_group_satisfaction',
+    'dag_tool_recall',
+    'dag_tool_precision',
+    'dag_tool_f1',
+    'dag_param_accuracy',
+    'dag_sequence_sanity',
+    'dag_completed_nodes',
+    'dag_missed_required_nodes',
+    'dag_extra_nodes',
+    'dag_dep_violations',
+    'dag_execution_order',
+    'dag_composite_score',
 ]
