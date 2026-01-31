@@ -2,10 +2,6 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473) [![Leaderboard](https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8)](https://fdabench.github.io/) [![HF Full](https://img.shields.io/badge/🤗-FDAbench--Full-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) [![HF Lite](https://img.shields.io/badge/🤗-FDAbench--Lite-ffc107)](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite)
 
-## 📰 News
-
-- 🎉 We are pleased to announce the official release of FDABench on HuggingFace! FDABench now seamlessly loads data directly from both [FDAbench2026/Fdabench-Full](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) and [FDAbench2026/Fdabench-Lite](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite). The FDABench-Full dataset contains 2,007 comprehensive test cases, while FDABench-Lite provides 289 pure SQLite test cases for faster experimentation. Both datasets span three distinct task categories: report, single-choice, and multiple-choice. We specifically designed FDABench-Lite with pure SQLite compatibility to enable users to get started quickly with minimal setup requirements.
-
 **FDABench** is the first data agent benchmark specifically designed for evaluating agents in multi-source data analytical scenarios. Our contributions include: (i) we construct a standard benchmark with 2,007 diverse tasks across different data sources, domains, difficulty levels, and task types to comprehensively evaluate data agent performance; (ii) we design an agent-expert collaboration dataset generation framework ensuring reliable and efficient heterogeneous data benchmark construction; (iii) we equip FDABench with strong generalization capabilities across diverse target systems and frameworks. We use FDABench to evaluate various data agent systems, revealing that each data agent system exhibits distinct advantages and limitations regarding response quality, accuracy, latency, and token cost.
 
 ## Overview
@@ -93,21 +89,7 @@ echo "OPENROUTER_API_KEY=your-openrouter-api-key" >> .env
 After completing the environment setup above, you can immediately start using FDABench with FDABench-Lite:
 
 ### Database Download
-To download the FDABench-Lite related database files, please access the database file at this [link](https://drive.google.com/file/d/1Ae2XQ-3VvhDvqfCBbIbeyQeYim58GFp7/view?usp=sharing). After downloading, please extract the database files to your desired directory.
-
-### Configure Database Paths
-
-Edit `FDABench/utils/database_connection_manager.py` and update the configuration:
-
-```python
-default_config = {
-    # SQLite database paths
-    'bird_db_path': "/your/path/to/databases",
-    'local_db_path': "/your/path/to/databases", 
-    'spider1_db_path': "/your/path/to/databases",
-    
-}
-```
+Download the FDABench-Lite database files from [Google Drive](https://drive.google.com/file/d/1Ae2XQ-3VvhDvqfCBbIbeyQeYim58GFp7/view?usp=sharing), extract to your directory, and configure paths in `FDABench/utils/database_connection_manager.py` (see [FDABench-Full Usage](#fdabench-full-usage) for details).
 
 ### Dataset Loading and Start
 
@@ -170,7 +152,7 @@ default_config = {
 }
 ```
 
-#### 4. Directory Structure
+#### 5. Directory Structure
 ```
 your_databases/
 ├── BIRD_train/train_databases/
@@ -532,7 +514,7 @@ The benchmark uses a structured JSON format for test cases:
 
 - **Accuracy**: Percentage of correctly answered questions
 - **Execution Success**: Rate of successful SQL query execution
-- **Latency**: Average ent-to-end response time per query
+- **Latency**: Average end-to-end response time per query
 - **Tool Usage Score**: Effectiveness of tool selection and usage
 
 
@@ -561,18 +543,10 @@ FDABench/
 │   └── prompts/                 # Prompt templates and management
 │       └── prompts.py          # Standard prompts for agents
 ├── examples/                    # Usage examples and test scripts
-│   ├── data/                   # Temporary processing files
 │   ├── run_planning_agent.py   # Planning agent examples
 │   ├── run_multi_agent.py      # Multi-agent examples
 │   ├── run_reflection_agent.py # Reflection agent examples
 │   └── run_tooluse_agent.py    # Tool-use agent examples
-├── FDABench/examples/           # Semantic operator agents  
-│   ├── test_planning_agent_docetl_batch.py   # DocETL semantic operators
-│   ├── test_planning_agent_lotus_batch.py    # Lotus semantic operators
-│   ├── test_planning_agent_pz_batch.py       # Palimpzest semantic operators
-│   ├── docetl_environment.yml  # DocETL environment setup
-│   ├── lotus_environment.yml   # Lotus environment setup
-│   └── palimpzest_environment.yml # Palimpzest environment setup
 ├── sample/                      # Legacy sample data (deprecated)
 │   ├── sample_data.json        # Sample task configuration
 │   └── regional_sales/         # Sample database directory
