@@ -401,17 +401,20 @@ Choose the most logical next tool from: {allowed_tools + ["terminate"]}"""
             # SQL related
             "sql_generate": "generated_sql",
             "generated_sql": "generated_sql",
+            "generate_sql": "generate_sql",
             "sql_execute": "execute_sql",
             "execute_sql": "execute_sql",
-            
+
             # Schema related
             "schema_understanding": "get_schema_info",
             "get_schema_info": "get_schema_info",
-            
+
             # Search related
-            "web_context_search": "perplexity_search",
-            "perplexity_search": "perplexity_search",
+            "web_context_search": "web_context_search",
+            "perplexity_search": "web_context_search",
+            "web_search": "web_search",
             "vectorDB_search": "vectorDB_search",
+            "vector_search": "vector_search",
             
             # Other tools
             "sql_optimize": "sql_optimize",
@@ -431,7 +434,7 @@ Choose the most logical next tool from: {allowed_tools + ["terminate"]}"""
         params["database_type"] = query.database_type  # Add database type
         
         # FIX: Add tool-specific parameter preparation for SQL tools
-        if tool_name in ["generated_sql", "sql_generate"]:
+        if tool_name in ["generated_sql", "sql_generate", "generate_sql"]:
             params["natural_language_query"] = query.advanced_query or query.query or query.original_query
             params["database_name"] = query.db
             # Pass schema info if available from previous tools
@@ -468,11 +471,11 @@ Choose the most logical next tool from: {allowed_tools + ["terminate"]}"""
                 # Pass the entire tool_results as previous_results for the tool to handle
                 params["previous_results"] = self.tool_results.copy()
         
-        elif tool_name in ["web_context_search", "perplexity_search"]:
+        elif tool_name in ["web_context_search", "perplexity_search", "web_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
-            
-        elif tool_name == "vectorDB_search":
+
+        elif tool_name in ["vectorDB_search", "vector_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
             
@@ -878,17 +881,20 @@ Answer:"""
             # SQL related
             "sql_generate": "generated_sql",
             "generated_sql": "generated_sql",
-            "sql_execute": "execute_sql", 
+            "generate_sql": "generate_sql",
+            "sql_execute": "execute_sql",
             "execute_sql": "execute_sql",
-            
+
             # Schema related
             "schema_understanding": "get_schema_info",
             "get_schema_info": "get_schema_info",
-            
+
             # Search related
-            "web_context_search": "perplexity_search",
-            "perplexity_search": "perplexity_search",
+            "web_context_search": "web_context_search",
+            "perplexity_search": "web_context_search",
+            "web_search": "web_search",
             "vectorDB_search": "vectorDB_search",
+            "vector_search": "vector_search",
             
             # Other tools
             "sql_optimize": "sql_optimize",

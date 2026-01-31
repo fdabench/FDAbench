@@ -250,7 +250,7 @@ Next?"""
         if tool_name in ["schema_understanding", "get_schema_info"]:
             params["database_name"] = query.db
             
-        elif tool_name in ["sql_generate", "generated_sql"]:
+        elif tool_name in ["sql_generate", "generated_sql", "generate_sql"]:
             params["natural_language_query"] = query.advanced_query or query.query or query.original_query
             params["database_name"] = query.db
             # Pass schema info if available
@@ -272,11 +272,11 @@ Next?"""
                 if isinstance(sql_result, dict) and "sql_query" in sql_result:
                     params["sql_query"] = sql_result["sql_query"]
                     
-        elif tool_name in ["web_context_search", "perplexity_search"]:
+        elif tool_name in ["web_context_search", "perplexity_search", "web_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
-            
-        elif tool_name == "vectorDB_search":
+
+        elif tool_name in ["vectorDB_search", "vector_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query
             params["expected_query"] = query.advanced_query or query.query or query.original_query
             

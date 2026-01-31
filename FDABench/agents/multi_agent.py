@@ -117,9 +117,9 @@ class MultiAgent(BaseAgent):
         
         # Expert types mapping to tools they can handle
         self.expert_types = {
-            'sql': ['sql_generate', 'sql_execute', 'get_schema_info', 'generated_sql', 'execute_sql'],
-            'web': ['web_context_search', 'perplexity_search'],
-            'vector': ['vectorDB_search'], 
+            'sql': ['sql_generate', 'sql_execute', 'get_schema_info', 'generated_sql', 'execute_sql', 'generate_sql'],
+            'web': ['web_context_search', 'perplexity_search', 'web_search'],
+            'vector': ['vectorDB_search', 'vector_search'],
             'schema': ['schema_understanding', 'get_schema_info'],
             'optimize': ['sql_optimize'],
             'debug': ['sql_debug'],
@@ -266,7 +266,7 @@ Return ONLY valid JSON array.
         
         # SQL expert communication patterns
         if action.expert_type == "sql":
-            if action.tool_name in ["sql_generate", "generated_sql"]:
+            if action.tool_name in ["sql_generate", "generated_sql", "generate_sql"]:
                 # SQL expert needs schema information
                 if "get_schema_info" not in self.state.completed_tools:
                     messages.append(ExpertMessage(
@@ -642,7 +642,7 @@ Please provide professional responses and suggestions:""")
         
         # Expert-specific parameter preparation
         if action.expert_type == "sql":
-            if action.tool_name in ["sql_generate", "generated_sql"]:
+            if action.tool_name in ["sql_generate", "generated_sql", "generate_sql"]:
                 params["natural_language_query"] = query.advanced_query or query.query
                 params["database_name"] = query.db
                 # Pass schema if available from previous expert actions
