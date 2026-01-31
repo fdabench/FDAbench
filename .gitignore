@@ -100,3 +100,46 @@ __pycache__/
 *.so
 FDABench/core/__pycache__/
 FDABench/utils/__pycache__/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Test and demo files
+test_*.py
+demo_*.py
+*_test.py
+
+# Output data and logs
+output_data/
+log/
+logs/
+*.log
+
+# Index and storage
+storage_faiss/
+*.faiss
+faiss.index
+
+# Compressed files
+*.tar.gz
+*.zip
+*.7z
+
+# Database files
+*.duckdb
+*.db
+checkpoints.db
+
+# Assets (PDFs, images)
+assets/*.pdf
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Results
+results/

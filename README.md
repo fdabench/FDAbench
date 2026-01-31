@@ -427,7 +427,7 @@ cd dataset_build/
 # Interactive mode (default) - with human expert review
 python main.py
 
-# Automatic mode - without human review  
+# Automatic mode - without human review
 python main.py --auto
 
 # Set maximum revisions per item
@@ -439,15 +439,14 @@ python main.py --max-revisions 5
 ```
 dataset_build/
 ├── main.py              # Main dataset builder with human feedback support
-├── external_tools.py    # Smart tool selection (web/vector/file system)
-├── input_data/          # Source data and configurations
-│   ├── original_data/   # Original SQL queries (bird.jsonl)
-│   ├── gold_sql_result/ # Expected SQL execution results
-│   └── gold_sql_query/  # Gold SQL
-└── output_data/         # Generated test cases
+├── graph/               # LangGraph stateful workflow
+├── tools/               # Web search, vector search, SQL execution
+├── generators/          # Question and content generation
+├── models/              # Data models (DatasetEntry, SubtaskResult)
+└── utils/               # Display and I/O utilities
 ```
 
-The framework implements three-phase generation: (1) data initialization , (2) expert verification with accept/dispose/revise options, and (3) finalization.
+The framework implements three-phase generation: (1) data initialization, (2) expert verification with accept/dispose/revise options, and (3) finalization.
 
 
 
