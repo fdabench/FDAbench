@@ -36,7 +36,7 @@ class SingleChoiceGenerator:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "anthropic/claude-sonnet-4",
+                    "model": "anthropic/claude-opus-4.5",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7,
                     "top_p": 0.95,
@@ -77,7 +77,7 @@ class SingleChoiceGenerator:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "anthropic/claude-sonnet-4",
+                    "model": "anthropic/claude-opus-4.5",
                     "messages": openai_messages,
                     "temperature": 0.7,
                     "top_p": 0.95,

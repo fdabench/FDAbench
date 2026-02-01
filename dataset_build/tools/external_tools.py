@@ -9,7 +9,7 @@ import json
 import requests
 import logging
 import time
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from abc import ABC, abstractmethod
 from enum import Enum
 from dotenv import load_dotenv
@@ -64,9 +64,14 @@ class WebSearchTool(ExternalTool):
     
     def search(self, query: str) -> str:
         """Search using Perplexity API via OpenRouter"""
+        result = self.search_with_urls(query)
+        return result.get("content", "")
+
+    def search_with_urls(self, query: str) -> Dict[str, Any]:
+        """Search using Perplexity API and return content with URLs"""
         try:
             if not self.api_key:
-                return "Web search unavailable: Missing OPENROUTER_API_KEY"
+                return {"content": "Web search unavailable: Missing OPENROUTER_API_KEY", "urls": []}
 
             # Huawei enterprise example from TechReport
             huawei_example = """Enterprise Example — Huawei Expense Reimbursement Compliance Review Data Agent:
@@ -137,15 +142,39 @@ Output Structure:
 
             if response.status_code == 200:
                 response_data = response.json()
+                urls = []
+
+                # Extract citations from Perplexity response
+                # Citations can be in different places depending on API version
+                if 'citations' in response_data:
+                    urls = response_data['citations'][:10]
+                elif 'choices' in response_data and response_data['choices']:
+                    choice = response_data['choices'][0]
+                    # Check message for citations
+                    if 'message' in choice:
+                        msg = choice['message']
+                        if 'citations' in msg:
+                            urls = msg['citations'][:10]
+                        # Also check for context or sources
+                        if 'context' in msg:
+                            ctx = msg['context']
+                            if isinstance(ctx, list):
+                                for item in ctx[:10]:
+                                    if isinstance(item, dict) and 'url' in item:
+                                        urls.append(item['url'])
+                                    elif isinstance(item, str) and item.startswith('http'):
+                                        urls.append(item)
+
+                content = ""
                 if 'choices' in response_data and response_data['choices']:
-                    return response_data['choices'][0]['message']['content'].strip()
-                else:
-                    return "No response content available"
+                    content = response_data['choices'][0]['message']['content'].strip()
+
+                return {"content": content, "urls": urls}
             else:
-                return f"API request failed with status code: {response.status_code}"
+                return {"content": f"API request failed with status code: {response.status_code}", "urls": []}
 
         except Exception as e:
-            return f"Web search error: {e}"
+            return {"content": f"Web search error: {e}", "urls": []}
 
 class VectorSearchTool(ExternalTool):
     """Online vector database search tool implementation using bird.jsonl data"""
@@ -406,7 +435,7 @@ Respond with only: WEB_SEARCH, VECTOR_SEARCH, or FILE_SYSTEM"""
                     "Content-Type": "application/json",
                 },
                 data=json.dumps({
-                    "model": "anthropic/claude-3.5-sonnet",
+                    "model": "anthropic/claude-opus-4.5",
                     "messages": messages,
                 })
             )

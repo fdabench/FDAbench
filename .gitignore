@@ -153,3 +153,5 @@ docs/internal/
 # JSON test result files
 test_*.json
 *_result.json
+dataset_build/docs/regenerate_fdabench_lite.md
+dataset_build/scripts/regenerate_fdabench_lite.py

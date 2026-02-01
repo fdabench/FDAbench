@@ -137,11 +137,18 @@ Plan the minimal steps needed - don't add steps just to reach a number."""
         try:
             tool = self._get_web_tool()
             q = f"{query}\n\nContext:\n{context}" if context else query
-            result = tool.search(q)
-            step.result = result
+
+            # Use search_with_urls to get both content and URLs
+            result_data = tool.search_with_urls(q)
+            step.result = result_data.get("content", "")
+            step.urls = result_data.get("urls", [])
+
+            # If no URLs from API, try to extract from content
+            if not step.urls:
+                import re
+                step.urls = re.findall(r'https?://[^\s\)\]\"\'<>]+', step.result)[:10]
+
             step.success = True
-            import re
-            step.urls = re.findall(r'https?://[^\s\)\]]+', result)[:5]
         except Exception as e:
             step.result = str(e)
             step.success = False
@@ -198,8 +205,8 @@ Plan the minimal steps needed - don't add steps just to reach a number."""
         return ctx
 
     def build_frozen_results(self, ctx: ChainContext) -> Dict:
-        web_results = {"search_timestamp": datetime.now().strftime("%Y-%m-%d"), "searches": []}
-        vector_results = {"search_timestamp": datetime.now().strftime("%Y-%m-%d"), "searches": []}
+        web_results = {"searches": []}
+        vector_results = {"searches": []}
 
         for step in ctx.steps:
             if step.tool_type == ToolType.WEB_SEARCH and step.success:

@@ -413,7 +413,7 @@ Respond with only: WEB_SEARCH, VECTOR_SEARCH, or FILE_SYSTEM"""
                     "Content-Type": "application/json",
                 },
                 data=json.dumps({
-                    "model": "anthropic/claude-3.5-sonnet",
+                    "model": "anthropic/claude-opus-4.5",
                     "messages": messages,
                 })
             )

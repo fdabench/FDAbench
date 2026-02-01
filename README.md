@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473) [![Leaderboard](https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8)](https://fdabench.github.io/) [![HF Full](https://img.shields.io/badge/🤗-FDAbench--Full-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) [![HF Lite](https://img.shields.io/badge/🤗-FDAbench--Lite-ffc107)](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite)
 
-**FDABench** is the first data agent benchmark specifically designed for evaluating agents in multi-source data analytical scenarios. Our contributions include: (i) we construct a standard benchmark with 2,007 diverse tasks across different data sources, domains, difficulty levels, and task types to comprehensively evaluate data agent performance; (ii) we design an agent-expert collaboration dataset generation framework ensuring reliable and efficient heterogeneous data benchmark construction; (iii) we equip FDABench with strong generalization capabilities across diverse target systems and frameworks. We use FDABench to evaluate various data agent systems, revealing that each data agent system exhibits distinct advantages and limitations regarding response quality, accuracy, latency, and token cost.
+**FDABench** is a benchmark for evaluating data agents' reasoning ability over heterogeneous data in analytical scenarios. It contains 2,007 tasks across different data sources, domains, difficulty levels, and task types. We provide ready-to-use data agent implementations, a DAG-based evaluation system, and an agent-expert collaboration framework for dataset generation.
 
 ## Overview
 
@@ -19,24 +19,20 @@
 
 ## Key Features
 
-- **Open-Source Data Agents Implementations**: Provides several ready-to-use data agent workflow implementations 
-- **Agents Evaluation Framework**: Comprehensive support for evaluating diverse data agent architectures including Tool-Use Agents, Multi-Agent Systems, Planning Agents, and Reflection Agents
-- **Universal Database Compatibility**: Seamlessly integrates with multiple database systems and real-world production environments
-- **Flexible Data Agent Task Architecture**: Supports three distinct workload types - single-choice questions, multiple-choice scenarios, and open-ended report generation tasks
-- **Advanced Evaluation Metrics**: Built-in comprehensive evaluation system with detailed performance analytics and statistical insights about data agent systems
-- **Rich Agent Tool Ecosystem**: Extensive collection of integrated tools including database schema analysis, SQL query optimization, web search capabilities, and vector database operations
-- **Extensible Agent Framework**: Modular base classes and interfaces that enable easy implementation and integration of custom agent architectures
-- **Cost Monitoring**: Token usage tracking and cost analysis for data agent performance optimization and budget management
+- **Data Agent Implementations**: Ready-to-use agents (Planning, Multi-Agent, Reflection, Tool-Use)
+- **Comprehensive Evaluation**: Accuracy metrics, rubric-based scoring, and performance analytics
+- **Multi-Database Support**: SQLite, BigQuery, Snowflake, and unstructured data sources
+- **Three Task Types**: Single-choice, multiple-choice, and open-ended report generation
+- **Extensible Framework**: Modular base classes for custom agent integration
+- **Cost Tracking**: Token usage and latency monitoring
 
-## Benchmark Workload
+## Task Types
 
-### Task Categories
-- **Single Choice**: Multiple choice questions with one correct answer
-- **Multiple Choice**: Questions allowing multiple correct answers
-- **Report Mode**: Open-ended analytical tasks requiring comprehensive database analysis
-
-### Data Agent Interface
-The benchmark uses a standardized agent interface that abstracts away implementation details, allowing fair comparison across different agent architectures and approaches.
+| Type | Description |
+|------|-------------|
+| Single Choice | One correct answer from four options |
+| Multiple Choice | Multiple correct answers allowed |
+| Report | Open-ended analytical report generation |
 
 ## Environment Setup
 
@@ -397,196 +393,69 @@ Category: Healthcare_Medical Systems | File: medical_ai.pdf
 Content: This paper presents a novel approach to...
 ```
 
-## Agent-Expert Dataset Generation
+## Dataset Generation
 
-### Start To Build Test Cases
-
-To generate new test cases using the agent-expert collaboration framework:
+Generate new test cases using the agent-expert collaboration framework:
 
 ```bash
-cd dataset_build/
+# Interactive mode (with human review)
+python -m dataset_build.main
 
-# Interactive mode (default) - with human expert review
-python main.py
-
-# Automatic mode - without human review
-python main.py --auto
-
-# Set maximum revisions per item
-python main.py --max-revisions 5
+# Automatic mode
+python -m dataset_build.main --auto
 ```
 
-### Code Structure
+See [dataset_build/README.md](dataset_build/README.md) for detailed documentation.
 
-```
-dataset_build/
-├── main.py              # Main dataset builder with human feedback support
-├── graph/               # LangGraph stateful workflow
-├── tools/               # Web search, vector search, SQL execution
-├── generators/          # Question and content generation
-├── models/              # Data models (DatasetEntry, SubtaskResult)
-└── utils/               # Display and I/O utilities
-```
+## Custom Agent Integration
 
-The framework implements three-phase generation: (1) data initialization, (2) expert verification with accept/dispose/revise options, and (3) finalization.
-
-
-
-
-## Other Data Agent Integration
-
-### Adding a New Agent
-
-To integrate a new DB agent, inherit from the `BaseAgent` class:
+Inherit from `BaseAgent` to create custom agents:
 
 ```python
 from FDABench.core.base_agent import BaseAgent
 
-class YourCustomAgent(BaseAgent):
-    def __init__(self, model="openai/gpt-5", api_key=None, **kwargs):
-        super().__init__(model=model, api_key=api_key, **kwargs)
-        # Initialize your agent-specific components
-    
+class YourAgent(BaseAgent):
     def process_query_from_json(self, query_data):
-        """Main method to process queries from JSON format"""
         question_type = query_data.get("question_type", "report")
-        
         if question_type == "single_choice":
             return self.process_single_choice(query_data)
         elif question_type == "multiple_choice":
             return self.process_multiple_choice(query_data)
-        elif question_type == "report":
+        else:
             return self.process_report(query_data)
-    
-    def process_single_choice(self, query_data):
-        # Implement single choice question handling
-        # Return {"selected_answer": "A", "metrics": {...}}
-        pass
-    
-    def process_multiple_choice(self, query_data):
-        # Implement multiple choice question handling  
-        # Return {"selected_answers": ["A", "C"], "metrics": {...}}
-        pass
-    
-    def process_report(self, query_data):
-        # Implement report generation
-        # Return {"report": "Generated report...", "metrics": {...}}
-        pass
-```
-
-### Supported Integrations
-
-- **OpenAI**: GPT-5, and other OpenAI models
-- **LangChain**: Full LangChain ecosystem support
-- **Private APIs**: Custom API integrations
-- **Local Models**: Support for locally hosted LLMs
-
-## Dataset Format
-
-### Input Schema
-
-The benchmark uses a structured JSON format for test cases:
-
-```json
-{
-    "task_id": "FDA123",
-    "instance_id": "bq001",
-    "db": "ga360",
-    "level": "hard",
-    "database_type": "Spider2-lite",
-    "question_type": "single_choice",
-    "tools_available": ["get_schema_info", "generated_sql", "execute_sql"],
-    "query": "Your database question here",
-    "options": {
-        "A": "Option A text",
-        "B": "Option B text", 
-        "C": "Option C text",
-        "D": "Option D text"
-    },
-    "correct_answer": ["C"],
-    "explanation": "Detailed explanation of the correct answer"
-}
 ```
 
 ## Evaluation Metrics
 
-### Core Metrics
-
-- **Accuracy**: Percentage of correctly answered questions
-- **Execution Success**: Rate of successful SQL query execution
-- **Latency**: Average end-to-end response time per query
-- **Tool Usage Score**: Effectiveness of tool selection and usage
+- **Accuracy**: Correctness for choice questions
+- **Rubric Score**: Report quality evaluation
+- **Latency**: Response time per query
+- **Token Usage**: Cost tracking
 
 
 ## Directory Structure
 
 ```
 FDABench/
-├── FDABench/                     # Main package
-│   ├── agents/                   # Pre-implemented agent types
-│   │   ├── multi_agent.py       # Multi-agent coordination system
-│   │   ├── planning_agent.py    # Step-by-step planning agent
-│   │   ├── reflection_agent.py  # Self-reflective agent
-│   │   └── tool_use_agent.py    # Tool-focused agent
-│   ├── core/                    # Core framework components
-│   │   ├── base_agent.py       # Base agent interface
-│   │   ├── token_tracker.py    # Token usage monitoring
-│   │   └── tool_registry.py    # Tool management system
-│   ├── evaluation/              # Evaluation and scoring tools
-│   │   └── evaluation_tools.py # Comprehensive evaluation suite
-│   ├── tools/                   # Database and utility tools
-│   │   ├── schema_tools.py     # Database schema analysis
-│   │   ├── sql_tools.py        # SQL generation and optimization
-│   │   └── search_tools.py     # Web and vector search tools
-│   ├── utils/                   # Utility functions
-│   │   └── database_connection_manager.py  # Database connectivity
-│   └── prompts/                 # Prompt templates and management
-│       └── prompts.py          # Standard prompts for agents
-├── examples/                    # Usage examples and test scripts
-│   ├── run_planning_agent.py   # Planning agent examples
-│   ├── run_multi_agent.py      # Multi-agent examples
-│   ├── run_reflection_agent.py # Reflection agent examples
-│   └── run_tooluse_agent.py    # Tool-use agent examples
-├── sample/                      # Legacy sample data (deprecated)
-│   ├── sample_data.json        # Sample task configuration
-│   └── regional_sales/         # Sample database directory
-│       └── regional_sales.sqlite # Sample SQLite database
-├── results/                     # Test results and output files
-│   ├── *.duckdb                # DuckDB files with test results
-│   └── submission.jsonl        # Sample submission format
-├── environment.yml             # Conda environment specification
-├── pyproject.toml              # Package configuration
-├── INSTALL.md                  # Detailed installation guide
-└── README.md                   # This file
+├── FDABench/                # Main package
+│   ├── agents/              # Agent implementations (planning, multi, reflection, tool-use)
+│   ├── core/                # Base classes, token tracking, tool registry
+│   ├── evaluation/          # Evaluation and scoring tools
+│   ├── tools/               # Schema, SQL, search tools
+│   └── utils/               # Database connection, utilities
+├── dataset_build/           # Dataset generation framework (see dataset_build/README.md)
+├── examples/                # Usage examples
+├── results/                 # Test results (DuckDB files)
+└── environment.yml          # Conda environment
 ```
 
 ## Contributing
 
-We welcome contributions to FDABench! Here's how you can help:
-
-### Adding New Benchmark Tasks
-
-1. **Create task definitions** following the existing JSON schema
-2. **Include gold standard answers** with detailed explanations
-3. **Test with multiple agent types** to ensure fairness
-4. **Document complexity levels** and expected difficulty
-
-### Contributing New Agent Wrappers
-
-1. **Inherit from BaseAgent** or CustomAgentBase
-2. **Implement all required methods** (single_choice, multiple_choice, report)
-3. **Add comprehensive error handling** and logging
-4. **Include usage examples** and documentation
-5. **Test with the evaluation suite** to ensure compatibility
-
-
-### Pull Request Process
-
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request with detailed description
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Implement changes (inherit from `BaseAgent` for new agents)
+4. Test with the evaluation suite
+5. Open a Pull Request
 
 ## Submission
 
@@ -615,8 +484,6 @@ If you find FDABench useful in your research, please consider citing our paper:
   journal={arXiv preprint arXiv:2509.02473},
   year={2025}
 }
-
 ```
-
 
 ---
