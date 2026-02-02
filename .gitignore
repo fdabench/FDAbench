@@ -155,3 +155,11 @@ test_*.json
 *_result.json
 dataset_build/docs/regenerate_fdabench_lite.md
 dataset_build/scripts/regenerate_fdabench_lite.py
+
+# Local development files
+FDABench/docs/
+FDABench/examples/eval_fdabench_lite_dag.py
+FDABench/examples/eval_fdabench_lite_dag_concurrent.py
+FDABench/examples/eval_fdabench_multi_agent.py
+V5.1/
+dataset_build/scripts/
