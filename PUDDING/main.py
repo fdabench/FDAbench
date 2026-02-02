@@ -10,19 +10,19 @@ This script builds a dataset using a LangGraph-based workflow that supports:
 
 Usage:
     # Interactive mode (default)
-    python -m dataset_build.main
+    python -m PUDDING.main
 
     # Automatic mode (no human review)
-    python -m dataset_build.main --auto
+    python -m PUDDING.main --auto
 
     # Process limited queries
-    python -m dataset_build.main --limit 10
+    python -m PUDDING.main --limit 10
 
     # Resume a previous session
-    python -m dataset_build.main --resume dataset-build-20260131-abc123
+    python -m PUDDING.main --resume dataset-build-20260131-abc123
 
     # Custom paths
-    python -m dataset_build.main --input path/to/queries.jsonl --output path/to/output.json
+    python -m PUDDING.main --input path/to/queries.jsonl --output path/to/output.json
 """
 
 import os
@@ -70,16 +70,16 @@ def parse_args() -> argparse.Namespace:
         epilog="""
 Examples:
     # Interactive mode
-    python -m dataset_build.main
+    python -m PUDDING.main
 
     # Auto mode (no human review)
-    python -m dataset_build.main --auto
+    python -m PUDDING.main --auto
 
     # Process only 5 queries
-    python -m dataset_build.main --limit 5
+    python -m PUDDING.main --limit 5
 
     # Resume previous session
-    python -m dataset_build.main --resume dataset-build-20260131-abc123
+    python -m PUDDING.main --resume dataset-build-20260131-abc123
         """
     )
 

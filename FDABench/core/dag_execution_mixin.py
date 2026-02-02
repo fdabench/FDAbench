@@ -18,11 +18,11 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from dataset_build.models.dag_models import (
+from PUDDING.models.dag_models import (
     TaskDAG, DAGNode, DAGEdge, AlternativeGroup,
     NodeType, EdgeType, NodeStatus, DAGExecutionState,
 )
-from dataset_build.tools.dag_builder import DAGBuilder, convert_subtasks_to_dag
+from PUDDING.tools.dag_builder import DAGBuilder, convert_subtasks_to_dag
 
 logger = logging.getLogger(__name__)
 

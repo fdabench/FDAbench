@@ -393,19 +393,20 @@ Category: Healthcare_Medical Systems | File: medical_ai.pdf
 Content: This paper presents a novel approach to...
 ```
 
-## Dataset Generation
+## Dataset Generation (PUDDING)
 
-Generate new test cases using the agent-expert collaboration framework:
+**PUDDING** is an agentic dataset construction framework that combines LLM generation with iterative expert validation. It operates in three phases:
+
+1. **Initialization**: Gather structured data (schema, SQL results) and unstructured context (web search, vector retrieval, file system)
+2. **Expert Verification**: Iterative agent-expert collaboration with accept/revise/dispose decisions
+3. **Finalization**: Quality validation and difficulty classification
 
 ```bash
-# Interactive mode (with human review)
-python -m dataset_build.main
-
-# Automatic mode
-python -m dataset_build.main --auto
+python -m PUDDING.main          # Interactive mode (with expert review)
+python -m PUDDING.main --auto   # Automatic mode
 ```
 
-See [dataset_build/README.md](dataset_build/README.md) for detailed documentation.
+See [PUDDING/README.md](PUDDING/README.md) for detailed documentation.
 
 ## Custom Agent Integration
 
@@ -443,7 +444,7 @@ FDABench/
 │   ├── evaluation/          # Evaluation and scoring tools
 │   ├── tools/               # Schema, SQL, search tools
 │   └── utils/               # Database connection, utilities
-├── dataset_build/           # Dataset generation framework (see dataset_build/README.md)
+├── PUDDING/           # Dataset generation framework (see PUDDING/README.md)
 ├── examples/                # Usage examples
 ├── results/                 # Test results (DuckDB files)
 └── environment.yml          # Conda environment

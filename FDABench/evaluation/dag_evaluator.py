@@ -15,11 +15,11 @@ import logging
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any, Optional, Set, Tuple
 
-# Import from dataset_build models
+# Import from PUDDING models
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from dataset_build.models.dag_models import (
+from PUDDING.models.dag_models import (
     TaskDAG, DAGNode, DAGEdge, AlternativeGroup,
     NodeType, EdgeType, NodeStatus, DAGExecutionState,
     get_node_type_for_tool,
@@ -511,7 +511,7 @@ class DAGEvaluator:
                 gold_dag = TaskDAG.from_json(test_case["gold_dag"])
         elif "gold_subtasks" in test_case:
             # Convert linear subtasks to DAG
-            from dataset_build.tools.dag_builder import convert_subtasks_to_dag
+            from PUDDING.tools.dag_builder import convert_subtasks_to_dag
             gold_dag = convert_subtasks_to_dag(
                 instance_id=test_case.get("instance_id", "unknown"),
                 subtasks=test_case["gold_subtasks"],
