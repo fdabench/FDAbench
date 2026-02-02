@@ -243,41 +243,69 @@ Better approach? Reply "OK" or suggest tool from: {query.tools_available}"""
         
         allowed_tools = query.tools_available
         
-        # FIX: Improved prompt with better tool selection logic
+        # Improved prompt with better tool selection logic
         used_tools = list(self.tool_results.keys()) if self.tool_results else []
-        
+
         # Build context about what's been accomplished
         context_info = []
-        if "get_schema_info" in used_tools:
-            context_info.append("✅ Database schema obtained")
-        if "generated_sql" in used_tools:
-            context_info.append("✅ SQL query generated")
-        if "execute_sql" in used_tools:
+        has_schema = any(t in used_tools for t in ["get_schema_info", "schema_understanding"])
+        has_sql = any(t in used_tools for t in ["generated_sql", "generate_sql"])
+        has_exec = "execute_sql" in used_tools
+        has_web = any(t in used_tools for t in ["web_search", "web_context_search", "perplexity_search"])
+        has_vector = any(t in used_tools for t in ["vector_search", "vectorDB_search"])
+
+        if has_schema:
+            context_info.append("✅ Schema obtained")
+        if has_sql:
+            context_info.append("✅ SQL generated")
+        if has_exec:
             context_info.append("✅ SQL executed")
-        
+        if has_web:
+            context_info.append("✅ Web searched")
+        if has_vector:
+            context_info.append("✅ Vector searched")
+
         context_str = " | ".join(context_info) if context_info else "No tools executed yet"
-        
-        # Suggest next logical step
+
+        # Determine next logical step with clear priority
         next_step_suggestion = ""
-        if "get_schema_info" not in used_tools:
-            next_step_suggestion = "Start with get_schema_info to understand the database structure"
-        elif "generated_sql" not in used_tools:
-            next_step_suggestion = "Use generated_sql to create SQL query based on schema"
-        elif "execute_sql" not in used_tools:
-            next_step_suggestion = "Use execute_sql to run the generated SQL query"
+        recommended_tool = None
+        if not has_schema:
+            next_step_suggestion = "→ MUST start with get_schema_info"
+            recommended_tool = "get_schema_info"
+        elif not has_sql:
+            next_step_suggestion = "→ MUST generate SQL query next"
+            recommended_tool = "generate_sql" if "generate_sql" in allowed_tools else "generated_sql"
+        elif not has_exec:
+            next_step_suggestion = "→ MUST execute SQL (DO NOT skip this step!)"
+            recommended_tool = "execute_sql"
+        elif not has_web:
+            next_step_suggestion = "→ Should search web for external context"
+            recommended_tool = "web_search" if "web_search" in allowed_tools else "web_context_search"
+        elif not has_vector:
+            next_step_suggestion = "→ Should search vector DB for domain knowledge"
+            recommended_tool = "vector_search" if "vector_search" in allowed_tools else "vectorDB_search"
         else:
-            next_step_suggestion = "All core tools completed, consider web_context_search or vectorDB_search for additional context"
-        
-        prompt = f"""Query: {query.advanced_query}
+            next_step_suggestion = "→ All steps complete, use terminate"
+            recommended_tool = "terminate"
+
+        prompt = f"""Database Analysis Task - Reflection Agent
+
+Query: {query.advanced_query}
 Database: {query.db}
-Available Tools: {allowed_tools}
-Context: {context_str}
-Next Step: {next_step_suggestion}
+Progress: {context_str}
+{next_step_suggestion}
+
+CRITICAL RULES:
+1. NEVER skip execute_sql after generate_sql - you need actual data!
+2. Follow order: get_schema_info → generate_sql → execute_sql → web_search → vector_search
+3. Use terminate only after completing all necessary steps
+
+Available: {allowed_tools + ["terminate"]}
+Recommended: {recommended_tool}
 
 Return JSON only:
-{{"action_type": "TOOL_NAME", "parameters": {{"database_name": "{query.db}"}}}}
-
-Choose the most logical next tool from: {allowed_tools + ["terminate"]}"""
+{{"action_type": "{recommended_tool}", "parameters": {{"database_name": "{query.db}"}}}}"""
         
         return prompt
 

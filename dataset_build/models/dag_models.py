@@ -142,9 +142,16 @@ class DAGNode:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DAGNode":
         """Create DAGNode from dictionary."""
+        # Handle node_type: use explicit value or infer from tool name
+        if "node_type" in data:
+            node_type = NodeType(data["node_type"]) if isinstance(data["node_type"], str) else data["node_type"]
+        else:
+            # Infer from tool name for backward compatibility
+            node_type = get_node_type_for_tool(data.get("tool", ""))
+
         return cls(
             node_id=data["node_id"],
-            node_type=NodeType(data["node_type"]) if isinstance(data["node_type"], str) else data["node_type"],
+            node_type=node_type,
             tool=data["tool"],
             input=data.get("input", {}),
             description=data.get("description", ""),

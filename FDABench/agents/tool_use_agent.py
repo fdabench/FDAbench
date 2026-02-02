@@ -145,32 +145,59 @@ class ToolUseAgent(DAGExecutionMixin, BaseAgent):
     
     def _create_tool_selection_prompt(self, query: Query, available_tools: List[str], tool_descriptions: Dict[str, str]) -> str:
         """Create a context-aware prompt for tool selection"""
-        
-        # Simplified - no longer need detailed tool descriptions for the ultra-simplified prompt
-        
+
+        # Track what tools have been used
+        used_tools = list(self.tool_results.keys()) if self.tool_results else []
+
         # Build context from previous tool results
-        context_summary = ""
+        context_parts = []
         if self.tool_results:
-            context_parts = []
             for tool_name, result in self.tool_results.items():
                 if isinstance(result, dict):
                     if "sql_query" in result:
-                        context_parts.append(f"{tool_name}: SQL generated")
+                        context_parts.append(f"✅ {tool_name}: SQL generated")
                     elif "query_results" in result:
                         rows = len(result["query_results"]) if isinstance(result["query_results"], list) else 0
-                        context_parts.append(f"{tool_name}: {rows} rows returned")
+                        context_parts.append(f"✅ {tool_name}: {rows} rows returned")
                     elif "tables" in result:
                         tables = len(result["tables"])
-                        context_parts.append(f"{tool_name}: {tables} tables found")
+                        context_parts.append(f"✅ {tool_name}: {tables} tables found")
                     else:
-                        context_parts.append(f"{tool_name}: data available")
+                        context_parts.append(f"✅ {tool_name}: completed")
                 else:
-                    context_parts.append(f"{tool_name}: result available")
-            context_summary = f"Previous results: {', '.join(context_parts)}"
-        
-        prompt = f"""Q: {query.advanced_query if query.advanced_query else query.query}
-Tools: {', '.join(available_tools)}
-Next?"""
+                    context_parts.append(f"✅ {tool_name}: completed")
+
+        # Determine next recommended step based on execution order
+        next_recommendation = ""
+        if not any(t in used_tools for t in ["get_schema_info", "schema_understanding"]):
+            next_recommendation = "→ Start with get_schema_info (required for database queries)"
+        elif not any(t in used_tools for t in ["generate_sql", "generated_sql"]):
+            next_recommendation = "→ Use generate_sql to create SQL based on schema"
+        elif not any(t in used_tools for t in ["execute_sql"]):
+            next_recommendation = "→ Use execute_sql to run the generated SQL (DO NOT skip this)"
+        elif not any(t in used_tools for t in ["web_search", "web_context_search", "perplexity_search"]):
+            next_recommendation = "→ Use web_search for external context/benchmarks"
+        elif not any(t in used_tools for t in ["vector_search", "vectorDB_search"]):
+            next_recommendation = "→ Use vector_search for domain expertise"
+        else:
+            next_recommendation = "→ All key steps completed, return 'none' to finish"
+
+        context_str = " | ".join(context_parts) if context_parts else "No tools executed yet"
+
+        prompt = f"""Database Analysis Task - Select Next Tool
+
+Query: {query.advanced_query if query.advanced_query else query.query}
+Database: {query.db}
+
+Completed: {context_str}
+{next_recommendation}
+
+Available: {', '.join(available_tools)}
+
+IMPORTANT: Follow this order for database queries:
+1. get_schema_info → 2. generate_sql → 3. execute_sql → 4. web_search → 5. vector_search
+
+Select ONE tool name (or 'none' if done):"""
 
         return prompt
     

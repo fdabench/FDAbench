@@ -55,7 +55,7 @@ class PlanningAgent(DAGExecutionMixin, BaseAgent):
                  model: str = "claude-sonnet-4-20250514",
                  api_base: str = "https://openrouter.ai/api/v1",
                  api_key: str = None,
-                 max_planning_steps: int = 6,
+                 max_planning_steps: int = 8,
                  max_execution_time: int = 30,
                  enable_dag: bool = False):
         """
@@ -99,20 +99,54 @@ class PlanningAgent(DAGExecutionMixin, BaseAgent):
         # Ensure tool_results is available
         if not hasattr(self, 'tool_results'):
             self.tool_results = {}
-        
-        # Clear planning prompt for better model understanding
+
+        # Build intelligent planning prompt based on query context
         tools_str = str(query.tools_available)
-        plan_prompt = f"""You are a task planning assistant. Given a query and available tools, create a JSON plan.
+        query_text = query.advanced_query or query.query or ''
+        db_name = query.db or ''
 
-Query: {query.query or ''}
-Available Tools: {tools_str}
+        # Analyze query complexity to guide planning
+        needs_external_knowledge = any(keyword in query_text.lower() for keyword in [
+            'industry', 'benchmark', 'standard', 'best practice', 'compare with',
+            'market', 'trend', 'regulation', 'compliance', 'external', 'context',
+            'explain why', 'what factors', 'implications', 'strategies'
+        ])
 
-Create a JSON array with 3-4 subtasks. Each subtask should have:
-- tool: exact tool name from the available tools list
-- input: parameters for the tool  
-- description: what this subtask accomplishes
+        plan_prompt = f"""You are a database analysis task planner. Analyze the query and create an optimal execution plan.
 
-Format: [{{"tool": "tool_name", "input": {{}}, "description": "description"}}]
+## Query
+{query_text}
+
+## Database
+{db_name}
+
+## Available Tools
+{tools_str}
+
+## Tool Descriptions
+- get_schema_info: Get database table structures (ALWAYS start with this for DB queries)
+- generate_sql / generated_sql: Generate SQL from natural language query
+- execute_sql: Execute SQL and get results (MUST follow generate_sql)
+- web_search / web_context_search / perplexity_search: Search web for external knowledge, industry context, benchmarks
+- vector_search / vectorDB_search: Search internal knowledge base for domain expertise, regulations, best practices
+
+## Planning Guidelines
+1. For data analysis queries: MUST include get_schema_info → generate_sql → execute_sql sequence
+2. If query asks about industry standards, benchmarks, or external context: ADD web_search after execute_sql
+3. If query requires domain expertise or regulatory knowledge: ADD vector_search
+4. Complex analytical queries typically need 5-7 steps
+5. Order matters: database operations first, then external knowledge enrichment
+
+## Query Analysis
+- Requires database query: {"Yes" if db_name else "No"}
+- Needs external context: {"Yes" if needs_external_knowledge else "Maybe"}
+
+Create a JSON array of subtasks. Each subtask needs:
+- tool: exact tool name from available tools
+- input: parameters for the tool
+- description: what this step accomplishes
+
+Output ONLY the JSON array, no other text.
 
 JSON:"""
 
@@ -144,8 +178,8 @@ JSON:"""
             
         except Exception as e:
             logger.warning(f"Planning failed: {e}. Using fallback plan.")
-            # Return basic fallback plan
-            return [
+            # Return comprehensive fallback plan with all necessary steps
+            fallback_subtasks = [
                 Subtask(
                     subtask_id="subtask_1",
                     tool="get_schema_info",
@@ -153,18 +187,31 @@ JSON:"""
                     description="Get database schema"
                 ),
                 Subtask(
-                    subtask_id="subtask_2", 
-                    tool="generated_sql",
+                    subtask_id="subtask_2",
+                    tool="generate_sql",
                     input={"natural_language_query": query.advanced_query or query.query, "database_name": query.db},
                     description="Generate SQL query"
                 ),
                 Subtask(
                     subtask_id="subtask_3",
-                    tool="execute_sql", 
+                    tool="execute_sql",
                     input={"database_name": query.db},
                     description="Execute SQL query"
+                ),
+                Subtask(
+                    subtask_id="subtask_4",
+                    tool="web_search",
+                    input={"query": query.advanced_query or query.query},
+                    description="Search for external context and industry knowledge"
+                ),
+                Subtask(
+                    subtask_id="subtask_5",
+                    tool="vector_search",
+                    input={"query": query.advanced_query or query.query},
+                    description="Search internal knowledge base for domain expertise"
                 )
             ]
+            return fallback_subtasks
     
     def _execute_subtask(self, subtask: Subtask, query: Query) -> SubtaskExecutionResult:
         """

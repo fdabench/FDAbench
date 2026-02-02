@@ -158,38 +158,58 @@ class MultiAgent(DAGExecutionMixin, BaseAgent):
         logger.info(f"Coordinator analyzing query and planning expert actions")
         
         # Use LLM for intelligent coordination
+        # Analyze current state
+        completed_tools = [a.tool_name for a in self.state.expert_actions]
+        has_schema = any(t in completed_tools for t in ["get_schema_info", "schema_understanding"])
+        has_sql = any(t in completed_tools for t in ["generate_sql", "generated_sql", "sql_generate"])
+        has_exec = any(t in completed_tools for t in ["execute_sql", "sql_execute"])
+        has_web = any(t in completed_tools for t in ["web_search", "web_context_search", "perplexity_search"])
+        has_vector = any(t in completed_tools for t in ["vector_search", "vectorDB_search"])
+
+        # Build progress summary
+        progress = []
+        if has_schema: progress.append("✅ Schema")
+        if has_sql: progress.append("✅ SQL")
+        if has_exec: progress.append("✅ Executed")
+        if has_web: progress.append("✅ Web")
+        if has_vector: progress.append("✅ Vector")
+        progress_str = " | ".join(progress) if progress else "No progress yet"
+
+        # Determine missing critical steps
+        missing_steps = []
+        if not has_schema: missing_steps.append("get_schema_info (priority 1)")
+        if not has_sql: missing_steps.append("generate_sql (priority 2)")
+        if not has_exec: missing_steps.append("execute_sql (priority 3) - CRITICAL!")
+        if not has_web: missing_steps.append("web_search (priority 4)")
+        if not has_vector: missing_steps.append("vector_search (priority 5)")
+
         prompt = f"""
-You are a multi-agent coordinator analyzing database query tasks.
+Multi-Agent Coordinator - Database Analysis Task
 
 Query: {query.advanced_query or query.query}
 Database: {query.db} ({query.database_type})
-Available Tools: {query.tools_available}
 
-Completed Actions: {[a.tool_name for a in self.state.expert_actions]}
-Available Results: {list(self.state.tool_results.keys())}
+Progress: {progress_str}
+Missing Steps: {', '.join(missing_steps) if missing_steps else 'All complete'}
 
-Expert Types Available:
-- sql: Handles database operations (sql_generate, sql_execute, get_schema_info)
-- web: Handles web searches (web_context_search, perplexity_search)  
-- vector: Handles vector searches (vectorDB_search)
-- schema: Handles schema understanding (schema_understanding, get_schema_info)
-- optimize: Handles SQL optimization (sql_optimize)
-- debug: Handles SQL debugging (sql_debug)
-- file: Handles file system searches (file_system_search)
-- context: Handles context management (context_history)
+CRITICAL EXECUTION ORDER (must follow):
+1. schema expert → get_schema_info (understand DB structure)
+2. sql expert → generate_sql (create query)
+3. sql expert → execute_sql (run query - DO NOT SKIP!)
+4. web expert → web_search (external context)
+5. vector expert → vector_search (domain knowledge)
 
-Based on the query and current state, plan optimal expert actions with priorities (1=highest, 3=lowest).
-Consider what tools would be most useful to answer the query effectively.
+Expert Types:
+- schema: get_schema_info, schema_understanding
+- sql: generate_sql, execute_sql, sql_optimize, sql_debug
+- web: web_search, web_context_search, perplexity_search
+- vector: vector_search, vectorDB_search
+- file: file_system_search
+- context: context_history
 
-Output JSON array:
-[
-    {{
-        "expert_type": "expert_name",
-        "tool_name": "tool_name", 
-        "priority": 1,
-        "reasoning": "brief explanation"
-    }}
-]
+Plan the NEXT actions needed (not already completed).
+Output JSON array with priority 1=highest:
+[{{"expert_type": "...", "tool_name": "...", "priority": 1, "reasoning": "..."}}]
 
 Return ONLY valid JSON array.
 """
