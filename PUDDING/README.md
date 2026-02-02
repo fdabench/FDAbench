@@ -20,12 +20,11 @@ Iterative agent-expert collaboration:
 - Construction agent generates initial draft from comprehensive context
 - Experts review following quality standards (integration necessity, answer correctness, realism)
 - Decisions: **Accept**, **Revise** with feedback, or **Dispose**
-- Achieves 75.9% first-iteration acceptance, averaging 1.9 iterations per task
 
 ### Phase 3: Finalization
 Quality validation and difficulty classification:
 - Single-source sufficiency tests (reject if solvable by any single source)
-- Difficulty classification: Easy (20.68%), Medium (32.84%), Hard (46.49%)
+- Difficulty classification: Easy, Medium, Hard
 
 ## Quick Start
 
