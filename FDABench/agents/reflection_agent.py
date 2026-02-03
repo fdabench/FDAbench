@@ -485,11 +485,11 @@ Return JSON only:
         elif tool_name in ["execute_sql", "sql_execute"]:
             params["database_name"] = query.db
             params["natural_language_query"] = query.advanced_query or query.query or query.original_query
-            # FIX: Pass generated SQL if available - check both action types and handle nested results
+            # FIX: Pass generated SQL if available - check all possible tool names
             sql_query = None
-            
-            # First try to get from tool_results using the exact action type
-            for action_type in ["generated_sql", "sql_generate"]:
+
+            # Check all possible SQL generation tool names
+            for action_type in ["generate_sql", "generated_sql", "sql_generate"]:
                 if action_type in self.tool_results:
                     sql_result = self.tool_results[action_type]
                     if isinstance(sql_result, dict):

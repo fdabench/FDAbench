@@ -220,14 +220,15 @@ class SQLGenerationTool:
                 f'Based *only* on this schema and the user\'s request, generate a single, valid SQL query to answer the following:',
                 f'User Request: "{natural_language_query}"',
                 '',
-                'Important Rules:',
-                '- Only use tables and columns listed in the schema',
+                'CRITICAL Rules:',
+                '- Use EXACT table and column names from schema (case-sensitive!)',
+                '- Table names like "Match" must be "Match", NOT "matches" or "match"',
+                '- Column names must match schema exactly',
+                '- Only use tables and columns that exist in the schema above',
                 '- Ensure correct SQL syntax for the database type',
                 '- For JSON fields in BigQuery, use proper JSON functions',
                 '- For SQLite JSON fields, use json_extract() function',
-                '- Return ONLY the SQL query - no explanation, no description, no text before or after',
-                '- Do NOT include any introductory text like "Here is the SQL query" or explanatory text',
-                '- Do NOT add comments or descriptions about what the query does',
+                '- Return ONLY the SQL query - no explanation, no text',
                 '- If the request cannot be answered with the given schema, return "QUERY_IMPOSSIBLE"'
             ])
 
@@ -302,7 +303,8 @@ class SQLExecutionTool:
             return kwargs["sql_query"]
 
         if previous_results and isinstance(previous_results, dict):
-            for tool_name in ["sql_generate", "generated_sql", "sql_gen"]:
+            # Check all possible tool names for SQL generation results
+            for tool_name in ["generate_sql", "sql_generate", "generated_sql", "sql_gen"]:
                 if tool_name in previous_results:
                     result = previous_results[tool_name]
                     if isinstance(result, dict):
@@ -311,6 +313,9 @@ class SQLExecutionTool:
                         if "results" in result and isinstance(result["results"], dict):
                             if "sql_query" in result["results"]:
                                 return result["results"]["sql_query"]
+                        # Also check for 'query' key
+                        if "query" in result:
+                            return result["query"]
         return None
 
     def _execute_sql_query(self, sql_query: str, database_name: str,

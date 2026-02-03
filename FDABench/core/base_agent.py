@@ -153,8 +153,8 @@ class BaseAgent:
             self.register_tool("sql_optimize", SQLOptimizationTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Optimize SQL queries for better performance")
             self.register_tool("sql_debug", SQLDebugTool(llm_client=self, db_manager=self.db_manager), category="sql", description="Debug and fix SQL query issues")
             
-            self.register_tool("get_schema_info", SchemaInspectionTool(), category="schema", description="Get database schema information")
-            self.register_tool("schema_understanding", SchemaInspectionTool(), category="schema", description="Understand database structure")
+            self.register_tool("get_schema_info", SchemaInspectionTool(db_manager=self.db_manager), category="schema", description="Get database schema information")
+            self.register_tool("schema_understanding", SchemaInspectionTool(db_manager=self.db_manager), category="schema", description="Understand database structure")
             
             self.register_tool("web_context_search", WebSearchTool(api_key=self.api_key), category="search", description="Search web for context information")
             self.register_tool("web_search", WebSearchTool(api_key=self.api_key), category="search", description="Search web for information")

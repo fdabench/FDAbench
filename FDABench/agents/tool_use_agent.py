@@ -194,35 +194,55 @@ Completed: {context_str}
 
 Available: {', '.join(available_tools)}
 
-IMPORTANT: Follow this order for database queries:
+CRITICAL ORDER (DO NOT skip steps):
 1. get_schema_info → 2. generate_sql → 3. execute_sql → 4. web_search → 5. vector_search
 
-Select ONE tool name (or 'none' if done):"""
+RULES:
+- You MUST execute all 5 tools in order for a complete analysis
+- DO NOT return 'none' until all steps are completed
+- execute_sql is REQUIRED after generate_sql
+
+Select ONE tool name:"""
 
         return prompt
     
     def _parse_tool_selection_response(self, response: str, available_tools: List[str]) -> Optional[str]:
         """Parse LLM response to extract the selected tool name"""
         response = response.strip().lower()
-        
+
         # Remove quotes and extra whitespace
         response = response.replace('"', '').replace("'", "").strip()
-        
+
         # Direct match
         for tool in available_tools:
             if tool.lower() == response:
                 return tool
-        
-        # Check for "none" or stop signals
-        if response in ["none", "stop", "done", "sufficient", "complete"]:
-            return None
-        
-        # Try to extract tool name from longer response
+
+        # Try to extract tool name from longer response (before checking stop signals)
         for tool in available_tools:
             if tool.lower() in response:
                 return tool
-        
-        # If no clear match found, return None
+
+        # Only allow stop if we've executed the critical tools
+        critical_tools_executed = sum(1 for t in self.tools_executed
+                                       if t in ["get_schema_info", "generate_sql", "execute_sql"])
+
+        # Check for "none" or stop signals ONLY if critical tools are done
+        if response in ["none", "stop", "done", "sufficient", "complete"]:
+            if critical_tools_executed >= 3:  # All 3 critical SQL tools executed
+                return None
+            else:
+                # Force continue with next critical tool
+                for tool in ["get_schema_info", "generate_sql", "execute_sql", "web_search", "vector_search"]:
+                    if tool in available_tools and tool not in self.tools_executed:
+                        logger.info(f"Overriding early termination, selecting: {tool}")
+                        return tool
+
+        # If no clear match found, return first unused tool
+        for tool in available_tools:
+            if tool not in self.tools_executed:
+                return tool
+
         return None
     
     def _execute_tool(self, tool_name: str, query: Query) -> ToolExecutionResult:
@@ -300,15 +320,22 @@ Select ONE tool name (or 'none' if done):"""
         elif tool_name in ["sql_execute", "execute_sql"]:
             params["database_name"] = query.db
             params["natural_language_query"] = query.advanced_query or query.query or query.original_query
-            # Pass generated SQL if available
-            if "sql_generate" in self.tool_results:
-                sql_result = self.tool_results["sql_generate"]
-                if isinstance(sql_result, dict) and "sql_query" in sql_result:
-                    params["sql_query"] = sql_result["sql_query"]
-            elif "generated_sql" in self.tool_results:
-                sql_result = self.tool_results["generated_sql"]
-                if isinstance(sql_result, dict) and "sql_query" in sql_result:
-                    params["sql_query"] = sql_result["sql_query"]
+            # Pass generated SQL if available - check all possible tool names
+            sql_query = None
+            for sql_tool in ["generate_sql", "sql_generate", "generated_sql"]:
+                if sql_tool in self.tool_results:
+                    sql_result = self.tool_results[sql_tool]
+                    if isinstance(sql_result, dict):
+                        if "sql_query" in sql_result:
+                            sql_query = sql_result["sql_query"]
+                            break
+                        elif "results" in sql_result and isinstance(sql_result["results"], dict):
+                            if "sql_query" in sql_result["results"]:
+                                sql_query = sql_result["results"]["sql_query"]
+                                break
+            if sql_query:
+                params["sql_query"] = sql_query
+                logger.info(f"✅ Passing SQL to execute_sql: {sql_query[:50]}...")
                     
         elif tool_name in ["web_context_search", "perplexity_search", "web_search"]:
             params["query"] = query.advanced_query or query.query or query.original_query

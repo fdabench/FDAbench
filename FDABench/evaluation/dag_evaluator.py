@@ -263,6 +263,61 @@ class DAGEvaluator:
         """Check if two tool names refer to the same tool."""
         return self._normalize_tool_name(tool1) == self._normalize_tool_name(tool2)
 
+    def _match_execution_to_nodes(
+        self,
+        gold_dag: TaskDAG,
+        tools_executed: List[str],
+    ) -> Dict[str, str]:
+        """
+        Match executed tools to DAG nodes in order, considering dependencies.
+
+        Returns a mapping of node_id -> executed_tool for matched nodes.
+        This handles the case where the same tool is used by multiple nodes.
+        """
+        # Track which nodes have been matched
+        matched_nodes: Dict[str, str] = {}
+        completed_node_ids: Set[str] = set()
+
+        # Build tool -> nodes mapping
+        tool_to_nodes: Dict[str, List[str]] = {}
+        for node_id, node in gold_dag.nodes.items():
+            normalized_tool = self._normalize_tool_name(node.tool)
+            if normalized_tool not in tool_to_nodes:
+                tool_to_nodes[normalized_tool] = []
+            tool_to_nodes[normalized_tool].append(node_id)
+
+        # Process executed tools in order
+        for executed_tool in tools_executed:
+            normalized = self._normalize_tool_name(executed_tool)
+            if normalized not in tool_to_nodes:
+                continue
+
+            # Find the first unmatched node that uses this tool and has deps satisfied
+            candidate_nodes = tool_to_nodes[normalized]
+
+            for node_id in candidate_nodes:
+                if node_id in matched_nodes:
+                    continue
+
+                # Check if hard dependencies are satisfied
+                hard_deps = gold_dag.get_hard_dependencies(node_id)
+                deps_satisfied = all(dep_id in completed_node_ids for dep_id in hard_deps)
+
+                if deps_satisfied:
+                    matched_nodes[node_id] = executed_tool
+                    completed_node_ids.add(node_id)
+                    break
+            else:
+                # No suitable node found with deps satisfied
+                # Match to first unmatched node anyway (for coverage counting)
+                for node_id in candidate_nodes:
+                    if node_id not in matched_nodes:
+                        matched_nodes[node_id] = executed_tool
+                        completed_node_ids.add(node_id)
+                        break
+
+        return matched_nodes
+
     def _compute_graph_coverage(
         self,
         gold_dag: TaskDAG,
@@ -275,19 +330,15 @@ class DAGEvaluator:
         critical_path = gold_dag.critical_path
         optional_nodes = gold_dag.get_optional_nodes()
 
-        # Normalize executed tools
-        executed_set = {self._normalize_tool_name(t) for t in tools_executed}
-
-        # Map node IDs to tools for matching
-        node_tool_map = {node_id: self._normalize_tool_name(node.tool)
-                        for node_id, node in gold_dag.nodes.items()}
+        # Match executed tools to nodes in order
+        matched_nodes = self._match_execution_to_nodes(gold_dag, tools_executed)
+        matched_node_ids = set(matched_nodes.keys())
 
         # Calculate required node coverage
         required_completed = 0
         missed_required = []
         for node_id in required_nodes:
-            expected_tool = node_tool_map.get(node_id)
-            if expected_tool in executed_set:
+            if node_id in matched_node_ids:
                 required_completed += 1
                 result.completed_nodes.append(node_id)
             else:
@@ -301,8 +352,7 @@ class DAGEvaluator:
         # Calculate critical path coverage
         critical_completed = 0
         for node_id in critical_path:
-            expected_tool = node_tool_map.get(node_id)
-            if expected_tool in executed_set:
+            if node_id in matched_node_ids:
                 critical_completed += 1
 
         result.critical_path_coverage = (
@@ -312,8 +362,7 @@ class DAGEvaluator:
         # Calculate optional node coverage
         optional_completed = 0
         for node_id in optional_nodes:
-            expected_tool = node_tool_map.get(node_id)
-            if expected_tool in executed_set:
+            if node_id in matched_node_ids:
                 optional_completed += 1
                 if node_id not in result.completed_nodes:
                     result.completed_nodes.append(node_id)
@@ -327,14 +376,17 @@ class DAGEvaluator:
             satisfied = False
             completed_in_group = 0
             for node_id in group.node_ids:
-                expected_tool = node_tool_map.get(node_id)
-                if expected_tool in executed_set:
+                if node_id in matched_node_ids:
                     completed_in_group += 1
             satisfied = completed_in_group >= group.min_required
             result.alt_group_satisfaction[group_id] = satisfied
 
-        # Find extra nodes (tools executed but not in gold DAG)
-        expected_tools = set(node_tool_map.values())
+        # Find extra tools (executed but not matched to any node)
+        matched_tools = set(matched_nodes.values())
+        expected_tools = {
+            self._normalize_tool_name(node.tool)
+            for node in gold_dag.nodes.values()
+        }
         extra = []
         for tool in tools_executed:
             normalized = self._normalize_tool_name(tool)
@@ -392,36 +444,39 @@ class DAGEvaluator:
         """Check for hard dependency violations in execution order."""
         violations = []
 
-        # Build a map of tool to position in execution order
-        tool_positions: Dict[str, int] = {}
-        for i, tool in enumerate(execution_order):
+        # Match execution to nodes first
+        matched_nodes = self._match_execution_to_nodes(gold_dag, execution_order)
+
+        # Build a map of node_id to position in execution order
+        node_positions: Dict[str, int] = {}
+        position = 0
+        for tool in execution_order:
             normalized = self._normalize_tool_name(tool)
-            if normalized not in tool_positions:
-                tool_positions[normalized] = i
+            # Find which node was matched to this tool execution
+            for node_id, matched_tool in matched_nodes.items():
+                if self._normalize_tool_name(matched_tool) == normalized:
+                    if node_id not in node_positions:
+                        node_positions[node_id] = position
+                        break
+            position += 1
 
         # Check each hard dependency
         for edge in gold_dag.edges:
             if edge.edge_type != EdgeType.HARD_DEP:
                 continue
 
-            source_node = gold_dag.nodes.get(edge.source_id)
-            target_node = gold_dag.nodes.get(edge.target_id)
+            source_id = edge.source_id
+            target_id = edge.target_id
 
-            if not source_node or not target_node:
-                continue
+            source_pos = node_positions.get(source_id, -1)
+            target_pos = node_positions.get(target_id, -1)
 
-            source_tool = self._normalize_tool_name(source_node.tool)
-            target_tool = self._normalize_tool_name(target_node.tool)
-
-            source_pos = tool_positions.get(source_tool, -1)
-            target_pos = tool_positions.get(target_tool, -1)
-
-            # If target was executed but source wasn't, or source came after target
+            # Only check if target node was actually matched/executed
             if target_pos >= 0:  # Target was executed
                 if source_pos < 0:  # Source wasn't executed
-                    violations.append((target_node.node_id, source_node.node_id))
+                    violations.append((target_id, source_id))
                 elif source_pos > target_pos:  # Source came after target
-                    violations.append((target_node.node_id, source_node.node_id))
+                    violations.append((target_id, source_id))
 
         result.dep_violations = violations
         result.sequence_sanity = 1.0 if not violations else 0.0
@@ -502,13 +557,16 @@ class DAGEvaluator:
             DAGEvaluationResult
         """
         # Get or create gold DAG
-        if "gold_dag" in test_case:
-            if isinstance(test_case["gold_dag"], TaskDAG):
-                gold_dag = test_case["gold_dag"]
-            elif isinstance(test_case["gold_dag"], dict):
-                gold_dag = TaskDAG.from_dict(test_case["gold_dag"])
+        # Check both "gold_dag" and "dag" keys for compatibility
+        dag_key = "gold_dag" if "gold_dag" in test_case else "dag" if "dag" in test_case else None
+        if dag_key:
+            dag_data = test_case[dag_key]
+            if isinstance(dag_data, TaskDAG):
+                gold_dag = dag_data
+            elif isinstance(dag_data, dict):
+                gold_dag = TaskDAG.from_dict(dag_data)
             else:
-                gold_dag = TaskDAG.from_json(test_case["gold_dag"])
+                gold_dag = TaskDAG.from_json(dag_data)
         elif "gold_subtasks" in test_case:
             # Convert linear subtasks to DAG
             from PUDDING.tools.dag_builder import convert_subtasks_to_dag
