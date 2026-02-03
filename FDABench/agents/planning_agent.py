@@ -124,18 +124,13 @@ class PlanningAgent(DAGExecutionMixin, BaseAgent):
 {tools_str}
 
 ## Tool Descriptions
-- get_schema_info: Get database table structures (ALWAYS start with this for DB queries)
+- get_schema_info: Get database table structures
 - generate_sql / generated_sql: Generate SQL from natural language query
-- execute_sql: Execute SQL and get results (MUST follow generate_sql)
+- execute_sql: Execute SQL and get results
 - web_search / web_context_search / perplexity_search: Search web for external knowledge, industry context, benchmarks
 - vector_search / vectorDB_search: Search internal knowledge base for domain expertise, regulations, best practices
 
-## Planning Guidelines
-1. For data analysis queries: MUST include get_schema_info → generate_sql → execute_sql sequence
-2. If query asks about industry standards, benchmarks, or external context: ADD web_search after execute_sql
-3. If query requires domain expertise or regulatory knowledge: ADD vector_search
-4. Complex analytical queries typically need 5-7 steps
-5. Order matters: database operations first, then external knowledge enrichment
+To answer data questions, you typically need to understand the schema, then retrieve data from the database, and optionally enrich with external context.
 
 ## Query Analysis
 - Requires database query: {"Yes" if db_name else "No"}

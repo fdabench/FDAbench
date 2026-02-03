@@ -175,14 +175,6 @@ class MultiAgent(DAGExecutionMixin, BaseAgent):
         if has_vector: progress.append("✅ Vector")
         progress_str = " | ".join(progress) if progress else "No progress yet"
 
-        # Determine missing critical steps
-        missing_steps = []
-        if not has_schema: missing_steps.append("get_schema_info (priority 1)")
-        if not has_sql: missing_steps.append("generate_sql (priority 2)")
-        if not has_exec: missing_steps.append("execute_sql (priority 3) - CRITICAL!")
-        if not has_web: missing_steps.append("web_search (priority 4)")
-        if not has_vector: missing_steps.append("vector_search (priority 5)")
-
         prompt = f"""
 Multi-Agent Coordinator - Database Analysis Task
 
@@ -190,14 +182,6 @@ Query: {query.advanced_query or query.query}
 Database: {query.db} ({query.database_type})
 
 Progress: {progress_str}
-Missing Steps: {', '.join(missing_steps) if missing_steps else 'All complete'}
-
-CRITICAL EXECUTION ORDER (must follow):
-1. schema expert → get_schema_info (understand DB structure)
-2. sql expert → generate_sql (create query)
-3. sql expert → execute_sql (run query - DO NOT SKIP!)
-4. web expert → web_search (external context)
-5. vector expert → vector_search (domain knowledge)
 
 Expert Types:
 - schema: get_schema_info, schema_understanding
@@ -207,8 +191,12 @@ Expert Types:
 - file: file_system_search
 - context: context_history
 
-Plan the NEXT actions needed (not already completed).
-Output JSON array with priority 1=highest:
+To answer data questions, you typically need to understand the schema, then retrieve data from the database, and optionally enrich with external context.
+
+Based on query requirements and current progress, plan what actions are needed.
+Return empty array [] if sufficient information is already gathered.
+
+Output JSON array:
 [{{"expert_type": "...", "tool_name": "...", "priority": 1, "reasoning": "..."}}]
 
 Return ONLY valid JSON array.

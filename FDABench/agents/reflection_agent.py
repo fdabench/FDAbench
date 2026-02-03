@@ -267,45 +267,18 @@ Better approach? Reply "OK" or suggest tool from: {query.tools_available}"""
 
         context_str = " | ".join(context_info) if context_info else "No tools executed yet"
 
-        # Determine next logical step with clear priority
-        next_step_suggestion = ""
-        recommended_tool = None
-        if not has_schema:
-            next_step_suggestion = "→ MUST start with get_schema_info"
-            recommended_tool = "get_schema_info"
-        elif not has_sql:
-            next_step_suggestion = "→ MUST generate SQL query next"
-            recommended_tool = "generate_sql" if "generate_sql" in allowed_tools else "generated_sql"
-        elif not has_exec:
-            next_step_suggestion = "→ MUST execute SQL (DO NOT skip this step!)"
-            recommended_tool = "execute_sql"
-        elif not has_web:
-            next_step_suggestion = "→ Should search web for external context"
-            recommended_tool = "web_search" if "web_search" in allowed_tools else "web_context_search"
-        elif not has_vector:
-            next_step_suggestion = "→ Should search vector DB for domain knowledge"
-            recommended_tool = "vector_search" if "vector_search" in allowed_tools else "vectorDB_search"
-        else:
-            next_step_suggestion = "→ All steps complete, use terminate"
-            recommended_tool = "terminate"
-
         prompt = f"""Database Analysis Task - Reflection Agent
 
 Query: {query.advanced_query}
 Database: {query.db}
 Progress: {context_str}
-{next_step_suggestion}
 
-CRITICAL RULES:
-1. NEVER skip execute_sql after generate_sql - you need actual data!
-2. Follow order: get_schema_info → generate_sql → execute_sql → web_search → vector_search
-3. Use terminate only after completing all necessary steps
+Available tools: {allowed_tools + ["terminate"]}
 
-Available: {allowed_tools + ["terminate"]}
-Recommended: {recommended_tool}
+To answer data questions, you typically need to understand the schema, then retrieve data from the database, and optionally enrich with external context.
 
 Return JSON only:
-{{"action_type": "{recommended_tool}", "parameters": {{"database_name": "{query.db}"}}}}"""
+{{"action_type": "<tool_name>", "parameters": {{"database_name": "{query.db}"}}}}"""
         
         return prompt
 

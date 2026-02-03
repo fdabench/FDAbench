@@ -167,42 +167,19 @@ class ToolUseAgent(DAGExecutionMixin, BaseAgent):
                 else:
                     context_parts.append(f"✅ {tool_name}: completed")
 
-        # Determine next recommended step based on execution order
-        next_recommendation = ""
-        if not any(t in used_tools for t in ["get_schema_info", "schema_understanding"]):
-            next_recommendation = "→ Start with get_schema_info (required for database queries)"
-        elif not any(t in used_tools for t in ["generate_sql", "generated_sql"]):
-            next_recommendation = "→ Use generate_sql to create SQL based on schema"
-        elif not any(t in used_tools for t in ["execute_sql"]):
-            next_recommendation = "→ Use execute_sql to run the generated SQL (DO NOT skip this)"
-        elif not any(t in used_tools for t in ["web_search", "web_context_search", "perplexity_search"]):
-            next_recommendation = "→ Use web_search for external context/benchmarks"
-        elif not any(t in used_tools for t in ["vector_search", "vectorDB_search"]):
-            next_recommendation = "→ Use vector_search for domain expertise"
-        else:
-            next_recommendation = "→ All key steps completed, return 'none' to finish"
-
         context_str = " | ".join(context_parts) if context_parts else "No tools executed yet"
 
-        prompt = f"""Database Analysis Task - Select Next Tool
-
+        prompt = f"""Database Analysis Task
 Query: {query.advanced_query if query.advanced_query else query.query}
 Database: {query.db}
 
-Completed: {context_str}
-{next_recommendation}
+Progress: {context_str}
 
-Available: {', '.join(available_tools)}
+Available tools: {', '.join(available_tools)}
 
-CRITICAL ORDER (DO NOT skip steps):
-1. get_schema_info → 2. generate_sql → 3. execute_sql → 4. web_search → 5. vector_search
+To answer data questions, you typically need to understand the schema, then retrieve data from the database, and optionally enrich with external context.
 
-RULES:
-- You MUST execute all 5 tools in order for a complete analysis
-- DO NOT return 'none' until all steps are completed
-- execute_sql is REQUIRED after generate_sql
-
-Select ONE tool name:"""
+Select ONE tool name (or 'none' if done):"""
 
         return prompt
     
@@ -213,37 +190,43 @@ Select ONE tool name:"""
         # Remove quotes and extra whitespace
         response = response.replace('"', '').replace("'", "").strip()
 
+        # Check for stop signals first - respect LLM's decision
+        if response in ["none", "stop", "done", "sufficient", "complete"]:
+            return None
+
         # Direct match
         for tool in available_tools:
             if tool.lower() == response:
-                return tool
+                return self._validate_dependencies(tool, available_tools)
 
-        # Try to extract tool name from longer response (before checking stop signals)
+        # Try to extract tool name from longer response
         for tool in available_tools:
             if tool.lower() in response:
-                return tool
+                return self._validate_dependencies(tool, available_tools)
 
-        # Only allow stop if we've executed the critical tools
-        critical_tools_executed = sum(1 for t in self.tools_executed
-                                       if t in ["get_schema_info", "generate_sql", "execute_sql"])
-
-        # Check for "none" or stop signals ONLY if critical tools are done
-        if response in ["none", "stop", "done", "sufficient", "complete"]:
-            if critical_tools_executed >= 3:  # All 3 critical SQL tools executed
-                return None
-            else:
-                # Force continue with next critical tool
-                for tool in ["get_schema_info", "generate_sql", "execute_sql", "web_search", "vector_search"]:
-                    if tool in available_tools and tool not in self.tools_executed:
-                        logger.info(f"Overriding early termination, selecting: {tool}")
-                        return tool
-
-        # If no clear match found, return first unused tool
-        for tool in available_tools:
-            if tool not in self.tools_executed:
-                return tool
-
+        # No clear match - return None to let LLM try again or stop
         return None
+
+    def _validate_dependencies(self, tool: str, available_tools: List[str]) -> Optional[str]:
+        """Validate tool dependencies and return tool or prerequisite"""
+        # Hard dependencies: generate_sql needs schema, execute_sql needs generated SQL
+        if tool in ["generate_sql", "sql_generate", "generated_sql"]:
+            if not any(t in self.tools_executed for t in ["get_schema_info", "schema_understanding"]):
+                # Need schema first
+                for schema_tool in ["get_schema_info", "schema_understanding"]:
+                    if schema_tool in available_tools:
+                        logger.info(f"Dependency: {tool} needs schema, selecting {schema_tool} first")
+                        return schema_tool
+
+        elif tool in ["execute_sql", "sql_execute"]:
+            if not any(t in self.tools_executed for t in ["generate_sql", "sql_generate", "generated_sql"]):
+                # Need SQL first
+                for sql_tool in ["generate_sql", "sql_generate", "generated_sql"]:
+                    if sql_tool in available_tools:
+                        logger.info(f"Dependency: {tool} needs SQL, selecting {sql_tool} first")
+                        return sql_tool
+
+        return tool
     
     def _execute_tool(self, tool_name: str, query: Query) -> ToolExecutionResult:
         """Execute a single tool using the tool registry and return structured result"""
