@@ -6,16 +6,9 @@
 
 ## Overview
 
-<table>
-<tr>
-<td width="50%"><b>Dataset Generation Pipeline</b></td>
-<td width="50%"><b>Data Agent System Architecture</b></td>
-</tr>
-<tr>
-<td><img src="assets/generation_loop.png" alt="Generation Pipeline"/></td>
-<td><img src="assets/arch.png" alt="System Architecture"/></td>
-</tr>
-</table>
+<p align="center">
+<img src="assets/generation_loop.png" alt="FDABench Overview" width="90%"/>
+</p>
 
 ## Key Features
 

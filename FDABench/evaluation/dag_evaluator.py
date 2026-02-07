@@ -66,17 +66,18 @@ class DAGEvaluationResult:
 
     def compute_composite_score(
         self,
-        graph_weight: float = 0.3,
-        tool_weight: float = 0.3,
-        e2e_weight: float = 0.4,
+        graph_weight: float = 0.5,
+        tool_weight: float = 0.5,
     ) -> float:
         """
-        Compute weighted composite score.
+        Compute weighted composite score (TOS).
+
+        TOS measures tool orchestration quality only, independent of
+        rubric-based report scoring (RS).
 
         Args:
             graph_weight: Weight for graph coverage
             tool_weight: Weight for tool use quality
-            e2e_weight: Weight for end-to-end score
 
         Returns:
             Weighted composite score
@@ -87,11 +88,10 @@ class DAGEvaluationResult:
         # Tool use score (F1 weighted by sequence sanity)
         tool_score = self.tool_f1 * self.sequence_sanity
 
-        # Composite
+        # Composite (pure tool metrics, no RS)
         self.composite_score = (
             graph_weight * graph_score +
-            tool_weight * tool_score +
-            e2e_weight * self.end_to_end_score
+            tool_weight * tool_score
         )
         return self.composite_score
 
