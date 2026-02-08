@@ -164,3 +164,8 @@ FDABench/examples/eval_fdabench_multi_agent.py
 V5.1/
 PUDDING/scripts/
 *.DS_Store
+
+# Evaluation output
+output/
+run_multi_model_eval.sh
+CLAUDE.md

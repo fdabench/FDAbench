@@ -28,7 +28,8 @@ class CandidateSpawner:
                 json={
                     "model": "anthropic/claude-opus-4.5",
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7
                 },
                 timeout=60
             )
@@ -84,11 +85,11 @@ Requirements:
 
 Output JSON array only (no markdown, no explanation):
 [
-  {{"tool": "web_search", "query": "specific search query here", "rationale": "what new information this adds"}},
-  {{"tool": "vector_search", "query": "specific search query here", "rationale": "what domain knowledge this provides"}}
+  {{"step": 1, "tool": "web_search", "query": "specific search query here", "rationale": "what new information this adds"}},
+  {{"step": 2, "tool": "vector_search", "query": "specific search query here", "rationale": "what domain knowledge this provides"}}
 ]"""
 
-        content = self._call_llm(prompt, 800)
+        content = self._call_llm(prompt, 1000)
         return self._parse_candidates(content, query)
 
     def _summarize_context(self, actions: List[ToolAction]) -> str:

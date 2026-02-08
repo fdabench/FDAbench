@@ -14,7 +14,6 @@ from PUDDING.tools.tool_executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
-# Tool name standardization
 TOOL_NAME_MAPPING = {
     "generated_sql": "generate_sql",
     "perplexity_search": "web_search",
@@ -30,6 +29,10 @@ TOOL_TO_NODE_TYPE = {
     "vector_search": "RETRIEVE_DOC",
     "file_search": "RETRIEVE_DOC",
     "db_explore": "SQL_QUERY",
+    "extract_evidence": "EXTRACT_EVIDENCE",
+    "compute": "COMPUTE",
+    "validate": "VALIDATE",
+    "synthesize_report": "SYNTHESIZE_REPORT",
 }
 
 STANDARD_TOOLS_AVAILABLE = [
@@ -63,7 +66,8 @@ class DAGAnnotator:
                 json={
                     "model": "anthropic/claude-opus-4.5",
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7
                 },
                 timeout=60
             )
@@ -149,9 +153,8 @@ class DAGAnnotator:
             },
         ]
 
-        # Add search steps from terminal path
         prev_step = "execute_sql"
-        seen_tools = {}  # tool_name -> count for deduplication
+        seen_tools = {}
         for action in terminal_path.actions:
             tool_name = standardize_tool_name(action.tool_name)
             seen_tools[tool_name] = seen_tools.get(tool_name, 0) + 1
@@ -167,6 +170,14 @@ class DAGAnnotator:
             })
             prev_step = subtask_id
 
+        subtasks.append({
+            "subtask_id": "synthesize_report",
+            "tool": "synthesize_report",
+            "input": {"query": query},
+            "description": "Synthesize final analytical report from SQL results and external evidence",
+            "depends_on": [prev_step],
+        })
+
         return subtasks
 
     def _build_dag(
@@ -180,8 +191,6 @@ class DAGAnnotator:
     ) -> Dict:
         """Build DAG structure matching FDAbench-Full format."""
         nodes = {}
-
-        # SQL core nodes (always present)
         nodes["get_schema_info"] = {
             "node_id": "get_schema_info",
             "node_type": "SQL_QUERY",
@@ -221,14 +230,15 @@ class DAGAnnotator:
             "expected_sql": None,
         }
 
-        # Search nodes from terminal path
         edges = [
             {"source_id": "get_schema_info", "target_id": "generate_sql", "edge_type": "HARD_DEP"},
             {"source_id": "generate_sql", "target_id": "execute_sql", "edge_type": "HARD_DEP"},
         ]
 
-        prev_node = "execute_sql"
+        search_node_ids = []
         seen_tools = {}
+        prev_node = "execute_sql"
+
         for action in terminal_path.actions:
             tool_name = standardize_tool_name(action.tool_name)
             seen_tools[tool_name] = seen_tools.get(tool_name, 0) + 1
@@ -247,16 +257,41 @@ class DAGAnnotator:
                 "expected_result": None,
                 "expected_sql": None,
             }
-
-            # All search edges are SOFT_DEP
-            edges.append({
-                "source_id": prev_node,
-                "target_id": node_id,
-                "edge_type": "SOFT_DEP",
-            })
+            edges.append({"source_id": prev_node, "target_id": node_id, "edge_type": "SOFT_DEP"})
             prev_node = node_id
+            search_node_ids.append(node_id)
 
-        # Entry/exit nodes
+        from collections import defaultdict
+        alt_groups = {}
+        parent_children = defaultdict(list)
+        for e in edges:
+            if e["edge_type"] == "SOFT_DEP" and e["target_id"] in search_node_ids:
+                parent_children[e["source_id"]].append(e["target_id"])
+        for parent, children in parent_children.items():
+            if len(children) >= 2:
+                gid = f"alt_{parent}"
+                alt_groups[gid] = {"group_id": gid, "node_ids": children, "min_required": 1}
+                for cid in children:
+                    nodes[cid]["alt_group_id"] = gid
+
+        nodes["synthesize_report"] = {
+            "node_id": "synthesize_report",
+            "node_type": "SYNTHESIZE_REPORT",
+            "tool": "synthesize_report",
+            "input": {"query": query},
+            "description": "Synthesize final analytical report from SQL results and external evidence",
+            "is_required": True,
+            "is_critical_path": True,
+            "alt_group_id": None,
+            "expected_result": None,
+            "expected_sql": None,
+        }
+        edges.append({
+            "source_id": prev_node,
+            "target_id": "synthesize_report",
+            "edge_type": "SOFT_DEP" if search_node_ids else "HARD_DEP",
+        })
+
         all_node_ids = set(nodes.keys())
         targets = set(e["target_id"] for e in edges)
         sources = set(e["source_id"] for e in edges)
@@ -267,10 +302,10 @@ class DAGAnnotator:
             "dag_id": task_id,
             "nodes": nodes,
             "edges": edges,
-            "alt_groups": {},
+            "alt_groups": alt_groups,
             "entry_nodes": entry_nodes,
             "exit_nodes": exit_nodes,
-            "critical_path": ["get_schema_info", "generate_sql", "execute_sql"],
+            "critical_path": ["get_schema_info", "generate_sql", "execute_sql", "synthesize_report"],
             "metadata": {"db_name": db_name, "query": query},
         }
 
@@ -370,7 +405,6 @@ Output JSON only:
         """Build rubric with LLM-generated criteria referencing actual data."""
         n_steps = len(terminal_path.actions)
 
-        # Determine sources used
         sources_used = ["sql_execution"]
         for action in terminal_path.actions:
             prov = action.provenance or {}
@@ -378,14 +412,8 @@ Output JSON only:
                 sources_used.append(action.tool_name)
         sources_used = list(set(sources_used))
 
-        # Weights by level
-        weights = {
-            "easy": {"SQL_ACCURACY": 0.4, "EXTERNAL_INTEGRATION": 0.2, "LOGICAL_REASONING": 0.2, "COMPLETENESS": 0.2},
-            "medium": {"SQL_ACCURACY": 0.3, "EXTERNAL_INTEGRATION": 0.25, "LOGICAL_REASONING": 0.25, "COMPLETENESS": 0.2},
-            "hard": {"SQL_ACCURACY": 0.25, "EXTERNAL_INTEGRATION": 0.25, "LOGICAL_REASONING": 0.25, "COMPLETENESS": 0.25},
-        }.get(level, {"SQL_ACCURACY": 0.25, "EXTERNAL_INTEGRATION": 0.25, "LOGICAL_REASONING": 0.25, "COMPLETENESS": 0.25})
+        weights = {"SQL_ACCURACY": 0.25, "EXTERNAL_INTEGRATION": 0.25, "LOGICAL_REASONING": 0.25, "COMPLETENESS": 0.25}
 
-        # LLM-generate specific criteria
         criteria = self._generate_criteria(query, sql_result, terminal_path, report)
 
         # Build chain_validation from actual steps

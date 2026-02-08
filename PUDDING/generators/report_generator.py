@@ -28,7 +28,8 @@ class ReportGenerator:
                 json={
                     "model": "anthropic/claude-opus-4.5",
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7
                 },
                 timeout=60
             )
@@ -46,7 +47,8 @@ class ReportGenerator:
                 json={
                     "model": "anthropic/claude-opus-4.5",
                     "messages": messages,
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7
                 },
                 timeout=90
             )
