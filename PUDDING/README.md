@@ -8,23 +8,24 @@ PUDDING addresses the trade-off between manual annotation (high quality, low sca
 
 ## Three-Phase Workflow
 
-### Phase 1: Initialization
+### Phase 1: Tree-Structured Exploration
 Given a candidate query with database instance and gold SQL:
 - Extract database schema and execute gold SQL for quantitative results
-- Retrieve enterprise demonstrations from real application cases
-- Collect external context via web search, vector retrieval, and file system search
-- Build comprehensive context across heterogeneous data modalities
+- Tree-structured context grounding with per-branch self-reflection (PRUNE/CONTINUE/SUFFICIENT)
+- Collect external context via web search, vector search, file search, and database exploration
+- Candidates spawned from frontier nodes, executed, and reflected upon iteratively
 
-### Phase 2: Expert Verification and Refinement
+### Phase 2: Report Generation and Expert Review
 Iterative agent-expert collaboration:
-- Construction agent generates initial draft from comprehensive context
-- Experts review following quality standards (integration necessity, answer correctness, realism)
-- Decisions: **Accept**, **Revise** with feedback, or **Dispose**
+- Generate enhanced query and ground truth report from terminal paths
+- Automated quality self-reflection
+- Expert review: **Accept**, **Revise** (re-enters Phase 1 for more evidence), or **Reject**
 
-### Phase 3: Finalization
+### Phase 3: Validation and Finalization
 Quality validation and difficulty classification:
-- Single-source sufficiency tests (reject if solvable by any single source)
-- Difficulty classification: Easy, Medium, Hard
+- Symmetric single-source check (reject if SQL alone OR external knowledge alone suffices)
+- LLM-based difficulty scoring on 4 dimensions (SQL complexity, source diversity, reasoning depth, domain knowledge)
+- DAG and rubric annotation from exploration trace
 
 ## Quick Start
 
@@ -51,11 +52,17 @@ PUDDING/
 ├── graph/                  # LangGraph workflow
 │   ├── builder.py          # Graph construction
 │   ├── nodes.py            # Processing nodes
-│   ├── edges.py            # Conditional edges
-│   ├── runner.py           # Workflow executor
+│   ├── edges.py            # Conditional routing
+│   ├── runner.py            # Workflow executor with interrupt handling
 │   └── state.py            # State definitions
-├── generators/             # Content generation
-├── models/                 # Data models (DAG, SubtaskResult, DatasetEntry)
-├── tools/                  # External tools (Web/Vector/File search, DAG builder)
+├── exploration/            # Tree exploration
+│   ├── candidate_spawner.py # LLM-based branch proposal
+│   └── branch_reflector.py  # Per-branch self-reflection
+├── generators/             # Report generation
+├── validation/             # Quality checks
+│   ├── single_source_validator.py  # Symmetric single-source rejection
+│   └── dag_annotator.py            # DAG, rubric, difficulty annotation
+├── models/                 # Data models (ExplorationTree, ToolAction, TerminalPath)
+├── tools/                  # Tool executor (web/vector/file search, db explore)
 └── utils/                  # Utilities (display, I/O)
 ```
