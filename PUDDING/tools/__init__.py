@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Tools module - External tools and subtask execution.
+Tools module - Tool execution, external tools, and vector search.
 """
 
-from .subtask_executor import GoldSubtaskManager
+from .tool_executor import ToolExecutor
 from .external_tools import (
     ExternalToolManager,
     ExternalToolType,
@@ -15,7 +15,7 @@ from .external_tools import (
 )
 
 __all__ = [
-    "GoldSubtaskManager",
+    "ToolExecutor",
     "ExternalToolManager",
     "ExternalToolType",
     "SubtaskResult",
