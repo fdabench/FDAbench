@@ -36,21 +36,19 @@ class ReportEvaluator:
             api_key=self.openrouter_api_key,
         )
 
-    def _call_openrouter_llm(self, messages, model="deepseek/deepseek-chat-v3-0324"):
+    def _call_openrouter_llm(self, messages, model="google/gemini-3-flash-preview"):
         """Call OpenRouter LLM with messages"""
         try:
             client = self._get_openrouter_client()
             completion = client.chat.completions.create(
                 extra_headers={
-                    "HTTP-Referer": "https://github.com/wa../FDABench",
-                    "X-Title": "Official First Round Report Evaluator for FDABenchmark",
+                    "HTTP-Referer": "https://github.com/fdabench/FDAbench",
+                    "X-Title": "FDABench Report Evaluator",
                 },
                 model=model,
                 messages=messages,
-                temperature=0.8,
+                temperature=0,
                 max_tokens=10,
-                presence_penalty=0.2,
-                frequency_penalty=0.2
             )
             return completion.choices[0].message.content
         except Exception as e:
@@ -209,7 +207,7 @@ Score:"""
                     {"role": "user", "content": prompt}
                 ]
                 
-                response = self._call_openrouter_llm(messages, model="deepseek/deepseek-chat-v3-0324")
+                response = self._call_openrouter_llm(messages, model="google/gemini-3-flash-preview")
                 try:
                     score_match = re.search(r'0\.\d+|1\.0|0|1', response)
                     if score_match:

@@ -69,30 +69,17 @@ class DAGEvaluationResult:
         graph_weight: float = 0.5,
         tool_weight: float = 0.5,
     ) -> float:
-        """
-        Compute weighted composite score (TOS).
-
-        TOS measures tool orchestration quality only, independent of
-        rubric-based report scoring (RS).
-
-        Args:
-            graph_weight: Weight for graph coverage
-            tool_weight: Weight for tool use quality
-
-        Returns:
-            Weighted composite score
-        """
-        # Graph coverage score (average of required and critical path)
+        """Compute TOS = avg(GC, TQ) with ALT_GROUP multi-path equivalence."""
         graph_score = (self.required_node_coverage + self.critical_path_coverage) / 2
 
-        # Tool use score (F1 weighted by sequence sanity)
+        if self.alt_group_satisfaction:
+            total = len(self.alt_group_satisfaction)
+            satisfied = sum(1 for v in self.alt_group_satisfaction.values() if v)
+            graph_score *= satisfied / total
+
         tool_score = self.tool_f1 * self.sequence_sanity
 
-        # Composite (pure tool metrics, no RS)
-        self.composite_score = (
-            graph_weight * graph_score +
-            tool_weight * tool_score
-        )
+        self.composite_score = graph_weight * graph_score + tool_weight * tool_score
         return self.composite_score
 
     def to_dict(self) -> Dict[str, Any]:
