@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Constants
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIM = 1536
-BATCH_SIZE = 100  # OpenAI recommends batching
+BATCH_SIZE = 50
 
 
 class TextChunker:

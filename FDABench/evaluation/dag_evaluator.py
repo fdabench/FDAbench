@@ -12,6 +12,7 @@ tasks, including:
 
 import json
 import logging
+import numpy as np
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any, Optional, Set, Tuple
 
@@ -145,19 +146,25 @@ class DAGEvaluator:
     Evaluates agent performance against a gold-standard TaskDAG.
     """
 
+    # Embedding-based fallback threshold for unseen tool names
+    EMBEDDING_SIMILARITY_THRESHOLD = 0.85
+
     def __init__(self):
         """Initialize the DAG evaluator."""
-        # Tool name aliases for matching
+        # 34 curated tool-name alias pairs
         self.tool_aliases: Dict[str, Set[str]] = {
-            "get_schema_info": {"schema_understanding", "get_schema", "schema"},
-            "generated_sql": {"sql_generate", "generate_sql", "sql_gen"},
-            "execute_sql": {"sql_execute", "run_sql", "exec_sql"},
-            "perplexity_search": {"web_search", "web_context_search", "search"},
-            "vectorDB_search": {"vector_search", "vec_search", "embedding_search"},
-            "file_system": {"file_search", "file_system_search", "fs_search"},
-            "sql_optimize": {"optimize_sql", "sql_optimization"},
-            "sql_debug": {"debug_sql", "sql_debugging"},
+            "get_schema_info": {"schema_understanding", "get_schema", "schema", "describe_schema"},
+            "generated_sql": {"sql_generate", "generate_sql", "sql_gen", "text_to_sql", "nl2sql"},
+            "execute_sql": {"sql_execute", "run_sql", "exec_sql", "run_query"},
+            "perplexity_search": {"web_search", "web_context_search", "search", "internet_search"},
+            "vectorDB_search": {"vector_search", "vec_search", "embedding_search", "semantic_search"},
+            "file_system": {"file_search", "file_system_search", "fs_search", "read_file"},
+            "sql_optimize": {"optimize_sql", "sql_optimization", "query_optimize"},
+            "sql_debug": {"debug_sql", "sql_debugging", "sql_fix"},
+            "context_history": {"get_context", "retrieve_history", "memory_lookup"},
         }
+        self._embedding_cache: Dict[str, np.ndarray] = {}
+        self._openai_client = None
 
     def evaluate(
         self,
@@ -235,14 +242,51 @@ class DAGEvaluator:
 
         return []
 
+    def _get_embedding(self, text: str) -> Optional[np.ndarray]:
+        """Get embedding for a tool name, with caching."""
+        if text in self._embedding_cache:
+            return self._embedding_cache[text]
+        try:
+            if self._openai_client is None:
+                from openai import OpenAI
+                api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    return None
+                self._openai_client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=api_key,
+                )
+            resp = self._openai_client.embeddings.create(
+                model="text-embedding-3-small", input=[text]
+            )
+            vec = np.array(resp.data[0].embedding, dtype=np.float32)
+            vec /= np.linalg.norm(vec) + 1e-9
+            self._embedding_cache[text] = vec
+            return vec
+        except Exception:
+            return None
+
     def _normalize_tool_name(self, tool: str) -> str:
-        """Normalize tool name to canonical form."""
+        """Normalize tool name via alias table, with embedding-based fallback."""
         tool_lower = tool.lower().strip()
 
-        # Check if it's an alias
+        # Exact alias lookup
         for canonical, aliases in self.tool_aliases.items():
             if tool_lower == canonical.lower() or tool_lower in {a.lower() for a in aliases}:
                 return canonical
+
+        # Embedding-based fallback for unseen tool names (cosine >= 0.85)
+        tool_emb = self._get_embedding(tool_lower)
+        if tool_emb is not None:
+            best_score, best_canonical = -1.0, None
+            for canonical in self.tool_aliases:
+                canon_emb = self._get_embedding(canonical.lower())
+                if canon_emb is not None:
+                    score = float(np.dot(tool_emb, canon_emb))
+                    if score > best_score:
+                        best_score, best_canonical = score, canonical
+            if best_score >= self.EMBEDDING_SIMILARITY_THRESHOLD and best_canonical:
+                return best_canonical
 
         return tool
 
