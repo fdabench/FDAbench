@@ -10,6 +10,10 @@
 <img src="assets/generation_loop.png" alt="FDABench Overview" width="90%"/>
 </p>
 
+<p align="center">
+<img src="assets/Pudding.png" alt="PUDDING Framework" width="90%"/>
+</p>
+
 ## Key Features
 
 - **Data Agent Implementations**: Ready-to-use agents (Planning, Multi-Agent, Reflection, Tool-Use)
