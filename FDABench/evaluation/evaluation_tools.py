@@ -48,7 +48,7 @@ class ReportEvaluator:
                 model=model,
                 messages=messages,
                 temperature=0,
-                max_tokens=10,
+                max_tokens=500,
             )
             return completion.choices[0].message.content
         except Exception as e:
@@ -137,92 +137,109 @@ class ReportEvaluator:
         except Exception:
             return 0.0
 
-    # def _calculate_ragas_score(self, generated: str, ground_truth: str) -> Dict[str, float]:
-    #     """
-    #     Calculate RAGAS scores using the ragas library.
-    #     
-    #     Formula:
-    #     RAGAS = 0.4 * Faithfulness + 0.3 * Answer_Relevance + 0.3 * Context_Relevance
-    #     
-    #     Reference: Es, S., James, J., Espinosa-Anke, L., & Schockaert, S. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation.
-    #     """
-    #     # RAGAS evaluation has been disabled to avoid LLM dependency
-    #     return {}
-
-    def _get_llm_judge_score(self, generated: str, ground_truth: str) -> float:
+    def _get_llm_judge_score(self, generated: str, ground_truth: str) -> Dict[str, float]:
         """
-        Get LLM's evaluation score for the generated report by evaluating each dimension separately.
-        
-        Formula:
-        LLM_Score = 0.4 * Content_Accuracy + 0.2 * Logical_Flow + 0.3 * Factual_Consistency + 0.1 * Clarity
-        
-        Reference: Liu, Y., et al. (2023). A Survey of LLM Evaluation.
+        Rubric-based LLM judge evaluation following the RS (Rubric Score) definition.
+
+        RS = sum(w_d * s_d) / sum(w_d), where w_d = 0.25 for each dimension.
+
+        Dimensions:
+          SQL_ACCURACY   {0, 1}           — exact match, LLM fallback for semantic equivalence
+          EXTERNAL_INTEG {0.0, 0.5, 1.0}  — cross-source synthesis quality
+          LOGICAL_REASON {0.0, 0.5, 1.0}  — reasoning chain coherence
+          COMPLETENESS   {0.0, 0.5, 1.0}  — query coverage
         """
         if not self.has_openai:
-            print("Warning: OpenRouter API key not set. LLM judge score will be 0.0.")
-            return 0.0
-            
-        try:
-            # Evaluate each dimension separately
-            dimensions = {
-                "content_accuracy": {
-                    "weight": 0.4,
-                    "prompt": "Evaluate the content accuracy and completeness (0-1):\nDoes it cover all key points from the ground truth? Are the facts and information accurate?"
-                },
-                "logical_flow": {
-                    "weight": 0.2,
-                    "prompt": "Evaluate the logical flow and structure (0-1):\nIs the information well-organized? Does it follow a clear logical progression?"
-                },
-                "factual_consistency": {
-                    "weight": 0.3,
-                    "prompt": "Evaluate the factual consistency (0-1):\nAre the facts consistent with the ground truth? Are there any contradictions or inaccuracies?"
-                },
-                "clarity": {
-                    "weight": 0.1,
-                    "prompt": "Evaluate the clarity and readability (0-1):\nIs the language clear and professional? Is it easy to understand?"
-                }
-            }
-            
-            final_score = 0.0
-            
-            for dim_name, dim_info in dimensions.items():
-                prompt = f"""You are an expert evaluator of reports. Please evaluate the following aspect of the generated report compared to the ground truth report.
+            return {"rs": 0.0, "sql_accuracy": 0.0, "external_integ": 0.0,
+                    "logical_reason": 0.0, "completeness": 0.0}
 
-Ground Truth Report:
-{ground_truth}
+        dimensions = {
+            "sql_accuracy": {
+                "weight": 0.25,
+                "valid_scores": [0.0, 1.0],
+                "prompt": (
+                    "Does the generated report correctly execute/interpret the SQL query and "
+                    "its result? Compare the SQL-derived facts in the generated report against "
+                    "the ground truth.\n"
+                    "Score 1 if the SQL result is accurately represented, 0 otherwise.\n"
+                    "Respond with exactly one number: 0 or 1."
+                ),
+            },
+            "external_integ": {
+                "weight": 0.25,
+                "valid_scores": [0.0, 0.5, 1.0],
+                "prompt": (
+                    "Does the generated report integrate external evidence (web search, "
+                    "vector retrieval) with the SQL findings?\n"
+                    "Score 0.0 if no external evidence is integrated.\n"
+                    "Score 0.5 if external evidence is mentioned but weakly connected to SQL facts.\n"
+                    "Score 1.0 if external evidence is well integrated and enriches the SQL findings.\n"
+                    "Respond with exactly one number: 0.0, 0.5, or 1.0."
+                ),
+            },
+            "logical_reason": {
+                "weight": 0.25,
+                "valid_scores": [0.0, 0.5, 1.0],
+                "prompt": (
+                    "Does the generated report demonstrate a coherent reasoning chain from "
+                    "SQL results through external context to analytical insights?\n"
+                    "Score 0.0 if reasoning is absent or incoherent.\n"
+                    "Score 0.5 if reasoning is partially coherent but has gaps.\n"
+                    "Score 1.0 if the reasoning chain is complete and logically sound.\n"
+                    "Respond with exactly one number: 0.0, 0.5, or 1.0."
+                ),
+            },
+            "completeness": {
+                "weight": 0.25,
+                "valid_scores": [0.0, 0.5, 1.0],
+                "prompt": (
+                    "Does the generated report address all aspects of the original query?\n"
+                    "Score 0.0 if major aspects are missing.\n"
+                    "Score 0.5 if some aspects are addressed but coverage is incomplete.\n"
+                    "Score 1.0 if all query aspects are thoroughly addressed.\n"
+                    "Respond with exactly one number: 0.0, 0.5, or 1.0."
+                ),
+            },
+        }
 
-Generated Report:
-{generated}
+        dim_scores = {}
+        weighted_sum = 0.0
+        weight_sum = 0.0
 
-{dim_info['prompt']}
+        for dim_name, dim_info in dimensions.items():
+            prompt = (
+                f"You are an expert evaluator for analytical reports. Evaluate the "
+                f"following dimension of the generated report against the ground truth.\n\n"
+                f"Ground Truth Report:\n{ground_truth}\n\n"
+                f"Generated Report:\n{generated}\n\n"
+                f"{dim_info['prompt']}"
+            )
+            messages = [
+                {"role": "system",
+                 "content": "You are an expert report evaluator. Respond with only a single "
+                            "numerical score as instructed. Do not include any other text."},
+                {"role": "user", "content": prompt},
+            ]
 
-Provide your score as a single number between 0 and 1, where:
-0 = Completely inaccurate or irrelevant
-1 = Perfect match with ground truth in terms of this aspect
-
-Score:"""
-
-                messages = [
-                    {"role": "system", "content": f"You are an expert evaluator of reports. Evaluate this specific aspect independently and provide only a numerical score between 0 and 1."},
-                    {"role": "user", "content": prompt}
-                ]
-                
+            try:
                 response = self._call_openrouter_llm(messages, model="google/gemini-3-flash-preview")
-                try:
-                    score_match = re.search(r'0\.\d+|1\.0|0|1', response)
-                    if score_match:
-                        dim_score = float(score_match.group())
-                        final_score += dim_score * dim_info['weight']
-                    else:
-                        print(f"Warning: Could not find a valid score for {dim_name} in response: {response}")
-                except ValueError:
-                    print(f"Warning: Could not parse score for {dim_name} from response: {response}")
-            
-            return min(max(final_score, 0), 1)  # Ensure final score is between 0 and 1
-                
-        except Exception as e:
-            print(f"Error getting LLM judge score: {str(e)}")
-            return 0.0
+                score_match = re.search(r'(?:1\.0|0\.5|0\.0|[01])', response)
+                if score_match:
+                    raw = float(score_match.group())
+                    score = min(v for v in dim_info["valid_scores"] if v >= raw) \
+                        if raw <= max(dim_info["valid_scores"]) else max(dim_info["valid_scores"])
+                else:
+                    score = 0.0
+            except Exception:
+                score = 0.0
+
+            dim_scores[dim_name] = score
+            weighted_sum += score * dim_info["weight"]
+            weight_sum += dim_info["weight"]
+
+        rs = weighted_sum / weight_sum if weight_sum > 0 else 0.0
+        dim_scores["rs"] = rs
+        return dim_scores
 
     def _calculate_bleu(self, generated: str, ground_truth: str) -> float:
         """Calculate BLEU score between generated and ground truth text."""
@@ -235,21 +252,22 @@ Score:"""
 
     def evaluate_reports(self, generated_report: str, ground_truth_report: str) -> Dict[str, float]:
         """Evaluate a generated report against a ground truth report using multiple metrics."""
-        # Preprocess texts
         generated = self._preprocess_text(generated_report)
         ground_truth = self._preprocess_text(ground_truth_report)
 
-        # Calculate all metrics (excluding RAGAS and LLM judge for speed)
         rouge_scores = self._calculate_rouge_scores(generated, ground_truth)
         precision_recall_f1 = self._calculate_precision_recall_f1(generated, ground_truth)
-        # llm_score = self._get_llm_judge_score(generated, ground_truth)  # 注释掉LLM judge以加速
+        llm_scores = self._get_llm_judge_score(generated, ground_truth)
         bleu_score = self._calculate_bleu(generated, ground_truth)
 
-        # Combine all scores (excluding RAGAS metrics and LLM judge)
         evaluation_results = {
             **rouge_scores,
             **precision_recall_f1,
-            # 'llm_judge_score': llm_score,  # 注释掉LLM judge以加速
+            'llm_judge_score': llm_scores.get('rs', 0.0),
+            'sql_accuracy': llm_scores.get('sql_accuracy', 0.0),
+            'external_integ': llm_scores.get('external_integ', 0.0),
+            'logical_reason': llm_scores.get('logical_reason', 0.0),
+            'completeness': llm_scores.get('completeness', 0.0),
             'bleu': bleu_score
         }
 
