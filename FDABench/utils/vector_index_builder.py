@@ -51,7 +51,7 @@ BATCH_SIZE = 50
 class TextChunker:
     """Simple text chunker with sentence-aware splitting."""
 
-    def __init__(self, chunk_size: int = 1024, chunk_overlap: int = 200):
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 200):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
@@ -480,7 +480,7 @@ def load_documents_from_directory(
 def build_unified_index(
     base_doc_path: str,
     unified_index_path: str,
-    chunk_size: int = 1024,
+    chunk_size: int = 512,
     chunk_overlap: int = 200,
     file_extensions: List[str] = None,
     api_key: str = None
@@ -616,7 +616,7 @@ def get_all_categories(base_path: str) -> List[str]:
 def build_indices_from_directories(
     base_doc_path: str,
     base_index_path: str,
-    chunk_size: int = 1024,
+    chunk_size: int = 512,
     chunk_overlap: int = 200,
     skip_existing: bool = False,
     file_extensions: List[str] = None,

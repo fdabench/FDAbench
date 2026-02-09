@@ -132,11 +132,11 @@ Output Structure:
                     "Content-Type": "application/json",
                 },
                 data=json.dumps({
-                    "model": "perplexity/sonar-pro",
+                    "model": "perplexity/sonar",
                     "messages": messages,
                     "temperature": 0.7,
                     "top_k": 0,
-                    "max_tokens": 6000
+                    "max_tokens": 4000
                 })
             )
 
@@ -275,7 +275,7 @@ class VectorSearchTool(ExternalTool):
                 return None
 
             query_engine = index.as_query_engine(
-                similarity_top_k=25,
+                similarity_top_k=5,
                 similarity_mode="cosine"
             )
             response = query_engine.query(query)
