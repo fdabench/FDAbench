@@ -1212,7 +1212,7 @@ Answer:"""
         """Generate single choice answer using multi-agent results"""
         if not query.options:
             return "No options available"
-        
+
         # Integrate insights from different expert types
         expert_insights = {}
         for _, result in self.state.tool_results.items():
@@ -1220,40 +1220,30 @@ Answer:"""
             if expert_type not in expert_insights:
                 expert_insights[expert_type] = []
             expert_insights[expert_type].append(str(result.results)[:300])
-        
+
         # Extract available options from the query
         available_options = list(query.options.keys()) if query.options else ['A', 'B', 'C', 'D']
         options_text = ', '.join(available_options)
-        
-        prompt = f"""
-        Query: {query.advanced_query or query.query}
-        Options: {json.dumps(query.options)}
-        
-        Multi-Agent Expert Insights:
-        {json.dumps(expert_insights, indent=2)}...
-        
-        You must select EXACTLY ONE answer from the available options: {options_text}
-        Your response should contain only the letter of your chosen answer.
-        
-        Answer:"""
-        
+
+        prompt = f"""Based on the query and multi-agent expert insights below, select the best answer.
+
+Query: {query.advanced_query or query.query}
+Options: {json.dumps(query.options)}
+
+Multi-Agent Expert Insights:
+{json.dumps(expert_insights, indent=2)}...
+
+Think step by step, then on the LAST line output ONLY your answer in the format:
+Answer: X
+where X is one of {options_text}."""
+
         response = self.call_llm_with_phase(
             [{"role": "user", "content": prompt}],
             phase="generate",
             category="multi_agent_choice"
         )
-        
-        # Extract answer - only accept valid options from the question
-        import re
-        valid_pattern = f'[{"".join(available_options)}]'
-        answer = re.search(valid_pattern, response.upper())
-        result = answer.group() if answer else "Unable to determine"
-        
-        # Additional validation - ensure the answer is in available options
-        if result != "Unable to determine" and result not in available_options:
-            return "Unable to determine"
-        
-        return result
+
+        return self.extract_choice_answer(response, available_options)
     
     def _should_retry_expert_action(self, action: ExpertAction, result, step: int) -> bool:
         """Determine if a failed expert action should be retried (enhanced version)"""

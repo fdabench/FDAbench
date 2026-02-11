@@ -1047,33 +1047,28 @@ Answer:"""
         """Generate single choice answer based on tool results"""
         if not query.options:
             return "No options available"
-        
+
         # Ensure tool_results is available
         if not hasattr(self, 'tool_results'):
             self.tool_results = {}
-        
+
         # Extract available options from the query
         available_options = list(query.options.keys()) if query.options else ['A', 'B', 'C', 'D']
         options_text = ', '.join(available_options)
-        
-        prompt = f"""Query: {query.advanced_query or query.query}
+
+        prompt = f"""Based on the query and results below, select the best answer.
+
+Query: {query.advanced_query or query.query}
 Options: {json.dumps(query.options)}
 Results: {json.dumps(self.tool_results, indent=1)}
 
-Select ONE option ({options_text}). Answer:"""
-        
+Think step by step, then on the LAST line output ONLY your answer in the format:
+Answer: X
+where X is one of {options_text}."""
+
         response = self.call_llm([{"role": "user", "content": prompt}], category="single_choice")
-        
-        # Extract answer - only accept valid options from the question
-        valid_pattern = f'[{"".join(available_options)}]'
-        answer = re.search(valid_pattern, response.upper())
-        result = answer.group() if answer else "Unable to determine"
-        
-        # Additional validation - ensure the answer is in available options
-        if result != "Unable to determine" and result not in available_options:
-            return "Unable to determine"
-        
-        return result
+
+        return self.extract_choice_answer(response, available_options)
     
     def generate_task_name(self, queries_data: List[Dict[str, Any]]) -> str:
         """Generate task name based on difficulty, dataset, and design pattern"""

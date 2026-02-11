@@ -222,6 +222,7 @@ class SQLGenerationTool:
                 '',
                 'CRITICAL Rules:',
                 '- Use EXACT table and column names from schema (case-sensitive!)',
+                '- Table/column names containing spaces or special chars MUST be quoted with double quotes, e.g. "Order ID", "Ship Date"',
                 '- Table names like "Match" must be "Match", NOT "matches" or "match"',
                 '- Column names must match schema exactly',
                 '- Only use tables and columns that exist in the schema above',
@@ -229,7 +230,8 @@ class SQLGenerationTool:
                 '- For JSON fields in BigQuery, use proper JSON functions',
                 '- For SQLite JSON fields, use json_extract() function',
                 '- Return ONLY the SQL query - no explanation, no text',
-                '- If the request cannot be answered with the given schema, return "QUERY_IMPOSSIBLE"'
+                '- Always try your best to generate a SQL query even if the schema seems incomplete',
+                '- Focus on the data retrieval part of the question and ignore parts that require external knowledge'
             ])
 
             prompt = "\n".join(prompt_parts)
@@ -241,9 +243,6 @@ class SQLGenerationTool:
                         category="sql_generate"
                     ).strip()
                     generated_sql = self._extract_sql_from_response(generated_sql)
-
-                    if generated_sql == "QUERY_IMPOSSIBLE":
-                        return {"status": "error", "error": "Query cannot be answered based on the provided schema."}
 
                 except Exception as e:
                     logger.error(f"LLM SQL generation failed: {e}")

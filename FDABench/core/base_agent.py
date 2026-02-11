@@ -6,6 +6,7 @@ It includes LLM integration, tool management, and token tracking.
 """
 
 import os
+import re
 import time
 import logging
 from typing import Dict, List, Any, Optional
@@ -312,12 +313,66 @@ class BaseAgent:
             self.token_tracker.track_phase_operation(phase, operation_name or "operation", duration)
             logger.debug(f"Completed {phase} phase: {operation_name} in {duration:.3f}s")
     
-    def call_llm_with_phase(self, messages: List[Dict[str, str]], 
-                           phase: str, category: str = "general", 
+    def call_llm_with_phase(self, messages: List[Dict[str, str]],
+                           phase: str, category: str = "general",
                            model: Optional[str] = None) -> str:
         """Call LLM with explicit phase tracking"""
         return self.call_llm(messages, model, category, phase)
-    
+
+    @staticmethod
+    def extract_choice_answer(response: str, available_options: List[str]) -> str:
+        """Extract a single choice answer from LLM response using multi-strategy matching.
+
+        Strategies (in priority order):
+        1. Match "Answer: X" or "answer is X" patterns
+        2. Match a standalone option letter on the last non-empty line
+        3. Take the last standalone option letter in the full response
+        4. Fall back to "Unable to determine"
+        """
+        if not response or not available_options:
+            return "Unable to determine"
+
+        opts = ''.join(available_options)  # e.g. "ABCD"
+        text = response.strip()
+
+        # Strategy 1: Match explicit answer patterns (case-insensitive)
+        # Covers: "Answer: C", "answer is C", "The answer is C", "**C**", "ANSWER: C"
+        answer_patterns = [
+            rf'[Aa]nswer\s*[:：]\s*\**([{opts}])\b',
+            rf'[Aa]nswer\s+is\s*\**([{opts}])\b',
+            rf'[Cc]hoose\s*\**([{opts}])\b',
+            rf'[Ss]elect\s*\**([{opts}])\b',
+            rf'\bcorrect\s+(?:answer|option)\s+is\s*\**([{opts}])\b',
+        ]
+        for pattern in answer_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                result = matches[-1].upper()
+                if result in available_options:
+                    return result
+
+        # Strategy 2: Last non-empty line is a standalone option letter
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        if lines:
+            last_line = lines[-1]
+            # Remove markdown bold/italic markers
+            cleaned = re.sub(r'[*_`]', '', last_line).strip()
+            if cleaned.upper() in available_options:
+                return cleaned.upper()
+
+        # Strategy 3: Last standalone option letter (word boundary) in text
+        standalone = re.findall(rf'\b([{opts}])\b', text.upper())
+        if standalone:
+            # Filter: only keep matches that are actually option letters (not part of words)
+            # Re-search with context to avoid matching letters inside words
+            contextual = re.findall(rf'(?:^|[\s,;.:()\[\]{{}}"\'])\s*([{opts}])(?:[\s,;.:()\[\]{{}}"\']|$)', text.upper())
+            if contextual:
+                result = contextual[-1].strip()
+                if result in available_options:
+                    return result
+
+        return "Unable to determine"
+
     def get_phase_results(self) -> Dict[str, Any]:
         """Get comprehensive phase statistics"""
         phase_summary = self.token_tracker.get_phase_summary()
