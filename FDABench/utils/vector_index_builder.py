@@ -39,8 +39,19 @@ try:
 except ImportError:
     HAS_PDFPLUMBER = False
 
+try:
+    import whisper as openai_whisper
+    HAS_WHISPER = True
+except ImportError:
+    HAS_WHISPER = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Audio/video extensions supported via Whisper transcription
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma'}
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov'}
+MEDIA_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
 # Constants
 EMBEDDING_MODEL = "text-embedding-3-small"
@@ -409,26 +420,70 @@ def read_pdf_content(file_path: str, timeout_seconds: int = 30) -> str:
     return ""
 
 
+def transcribe_media(file_path: str, whisper_model=None) -> str:
+    """
+    Transcribe audio/video file using Whisper-large-v3.
+
+    For video files, ffmpeg extracts the audio track automatically
+    (Whisper's load_audio handles this via ffmpeg).
+
+    Args:
+        file_path: Path to audio (.mp3/.wav/...) or video (.mp4/.mkv/...) file
+        whisper_model: Pre-loaded whisper model (to avoid reloading per file)
+
+    Returns:
+        Transcribed text content
+    """
+    if not HAS_WHISPER:
+        logger.warning(f"Skipping {file_path}: whisper not installed. "
+                       "Install with: conda install -c conda-forge openai-whisper")
+        return ""
+
+    try:
+        import torch
+        if whisper_model is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            whisper_model = openai_whisper.load_model("large-v3", device=device)
+
+        use_fp16 = next(whisper_model.parameters()).is_cuda
+        logger.info(f"  Transcribing: {os.path.basename(file_path)}")
+        result = whisper_model.transcribe(file_path, fp16=use_fp16)
+        text = result.get("text", "").strip()
+
+        if text:
+            logger.info(f"    Transcribed {len(text)} chars, language={result.get('language')}")
+        else:
+            logger.warning(f"    Empty transcription for {file_path}")
+
+        return text
+    except Exception as e:
+        logger.warning(f"Whisper transcription failed for {file_path}: {e}")
+        return ""
+
+
 def load_documents_from_directory(
     directory_path: str,
     file_extensions: List[str] = None,
-    recursive: bool = True
+    recursive: bool = True,
+    whisper_model=None
 ) -> List[Dict]:
     """
-    Load documents from directory.
+    Load documents from directory, including audio/video via Whisper transcription.
 
     Args:
         directory_path: Path to directory
-        file_extensions: List of extensions to include (e.g., ['.txt', '.md', '.pdf'])
-                        If None, loads common text formats including PDF
+        file_extensions: List of extensions to include (e.g., ['.txt', '.md', '.pdf', '.mp3'])
+                        If None, loads text, PDF, and audio/video formats
         recursive: Whether to search subdirectories
+        whisper_model: Pre-loaded whisper model for audio/video transcription
 
     Returns:
         List of document dicts with 'content', 'metadata' keys
     """
     if file_extensions is None:
-        # Include PDF by default
-        file_extensions = ['.txt', '.md', '.json', '.csv', '.html', '.xml', '.pdf']
+        file_extensions = ['.txt', '.md', '.json', '.csv', '.html', '.xml', '.pdf',
+                           '.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac',
+                           '.mp4', '.mkv', '.avi', '.webm', '.mov']
 
     file_extensions = [ext.lower() if ext.startswith('.') else f'.{ext.lower()}'
                        for ext in file_extensions]
@@ -445,19 +500,29 @@ def load_documents_from_directory(
         if not file_path.is_file():
             continue
 
-        if file_path.suffix.lower() not in file_extensions:
+        ext = file_path.suffix.lower()
+        if ext not in file_extensions:
             continue
 
         try:
-            # Handle PDF files specially
-            if file_path.suffix.lower() == '.pdf':
+            content = ""
+            file_type_tag = ext
+
+            if ext == '.pdf':
                 if not (HAS_PYPDF2 or HAS_PDFPLUMBER):
-                    logger.warning(f"Skipping PDF {file_path}: No PDF library installed. "
-                                   "Install with: pip install pdfplumber PyPDF2")
+                    logger.warning(f"Skipping PDF {file_path}: No PDF library installed.")
                     continue
                 content = read_pdf_content(str(file_path))
+
+            elif ext in MEDIA_EXTENSIONS:
+                if not HAS_WHISPER:
+                    logger.warning(f"Skipping media {file_path}: whisper not installed.")
+                    continue
+                content = transcribe_media(str(file_path), whisper_model=whisper_model)
+                # Tag as transcript for provenance
+                file_type_tag = f"{ext}(transcript)"
+
             else:
-                # Regular text files
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
 
@@ -467,7 +532,10 @@ def load_documents_from_directory(
                     'metadata': {
                         'file_path': str(file_path),
                         'file_name': file_path.name,
-                        'file_type': file_path.suffix
+                        'file_type': file_type_tag,
+                        'modality': 'audio' if ext in AUDIO_EXTENSIONS
+                                    else 'video' if ext in VIDEO_EXTENSIONS
+                                    else 'text'
                     }
                 })
         except Exception as e:
@@ -475,6 +543,19 @@ def load_documents_from_directory(
             continue
 
     return documents
+
+
+def _load_whisper_if_needed(file_extensions: List[str] = None):
+    """Load Whisper model if media extensions are in the file list."""
+    if not HAS_WHISPER:
+        return None
+    exts = set(file_extensions) if file_extensions else MEDIA_EXTENSIONS
+    if not (exts & MEDIA_EXTENSIONS):
+        return None
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(f"Loading Whisper large-v3 model on {device} for audio/video transcription...")
+    return openai_whisper.load_model("large-v3", device=device)
 
 
 def build_unified_index(
@@ -503,6 +584,9 @@ def build_unified_index(
     embedder = OpenAIEmbedder(api_key=api_key)
     chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
+    # Pre-load Whisper model once if media files might be present
+    whisper_model = _load_whisper_if_needed(file_extensions)
+
     # Get all categories
     categories = get_all_categories(base_doc_path)
     logger.info(f"Found {len(categories)} categories to process")
@@ -524,7 +608,8 @@ def build_unified_index(
             documents = load_documents_from_directory(
                 doc_path,
                 file_extensions=file_extensions,
-                recursive=True
+                recursive=True,
+                whisper_model=whisper_model
             )
 
             for doc in documents:
@@ -640,6 +725,9 @@ def build_indices_from_directories(
     embedder = OpenAIEmbedder(api_key=api_key)
     chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
+    # Pre-load Whisper model once
+    whisper_model = _load_whisper_if_needed(file_extensions)
+
     categories = get_all_categories(base_doc_path)
     logger.info(f"Found {len(categories)} categories")
 
@@ -667,7 +755,8 @@ def build_indices_from_directories(
             documents = load_documents_from_directory(
                 doc_path,
                 file_extensions=file_extensions,
-                recursive=True
+                recursive=True,
+                whisper_model=whisper_model
             )
             logger.info(f"  Loaded {len(documents)} documents")
 
@@ -783,6 +872,12 @@ def main():
         type=str,
         default=None,
         help="OpenAI API key (optional, uses OPENAI_API_KEY env var if not provided)"
+    )
+    parser.add_argument(
+        '--whisper-model',
+        type=str,
+        default="large-v3",
+        help="Whisper model size for audio/video transcription (default: large-v3)"
     )
 
     args = parser.parse_args()
