@@ -1,8 +1,8 @@
 # FDABench
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473) [![Leaderboard](https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8)](https://fdabench.github.io/) [![HF Full](https://img.shields.io/badge/🤗-FDAbench--Full-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) [![HF Lite](https://img.shields.io/badge/🤗-FDAbench--Lite-ffc107)](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![arXiv](https://img.shields.io/badge/arXiv-2509.02473-b31b1b.svg)](https://arxiv.org/pdf/2509.02473) [![Leaderboard](https://img.shields.io/badge/🏆%20Leaderboard-FDABench-00ADD8)](https://fdabench.github.io/) [![HF Full](https://img.shields.io/badge/🤗-FDAbench--Full-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDAbench-Full) [![HF Lite](https://img.shields.io/badge/🤗-Fdabench--Lite-ffc107)](https://huggingface.co/datasets/FDAbench2026/Fdabench-Lite) [![HF File](https://img.shields.io/badge/🤗-FDABench--File-ffc107)](https://huggingface.co/datasets/FDAbench2026/FDABench-File)
 
-**FDABench** is a benchmark for evaluating data agents' reasoning ability over heterogeneous data in analytical scenarios. It contains 2,007 tasks across different data sources, domains, difficulty levels, and task types. We provide ready-to-use data agent implementations, a DAG-based evaluation system, and an agent-expert collaboration framework for dataset generation.
+(KDD'26) **FDABench** is a benchmark for evaluating data agents on analytical queries over heterogeneous data. It contains 2,007 tasks across diverse domains, difficulty levels, and task types. We provide ready-to-use data agent implementations, a DAG-based evaluation system, and an agent-expert collaboration framework for dataset generation.
 
 ## Overview
 
@@ -77,16 +77,13 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 echo "OPENROUTER_API_KEY=your-openrouter-api-key" >> .env
 ```
 
-## Quick Start 
+## Quick Start
 
 After completing the environment setup above, you can immediately start using FDABench with FDABench-Lite:
 
-### Database Download
-Download the FDABench-Lite database files from [Google Drive](https://drive.google.com/file/d/1Ae2XQ-3VvhDvqfCBbIbeyQeYim58GFp7/view?usp=sharing), extract to your directory, and configure paths in `FDABench/utils/database_connection_manager.py` (see [FDABench-Full Usage](#fdabench-full-usage) for details).
-
 ### Dataset Loading and Start
 
-**HuggingFace Dataset**: FDABench now loads data directly from the HuggingFace dataset hub. The dataset `FDAbench2026/Fdabench-Lite` contains 289 curated test cases in three tasks for immediate use. We also offer FDABench-Full with 2007 test cases on HuggingFace.
+**HuggingFace Dataset**: FDABench now loads data directly from the HuggingFace dataset hub. The dataset `FDAbench2026/Fdabench-Lite` contains 289 curated test cases in three tasks for immediate use. We also offer FDABench-Full with 2,007 test cases on HuggingFace, and the raw multimodal corpus (PDFs, images, audio, video across 50 domains) at `FDAbench2026/FDABench-File`.
 
 ```bash
 # Activate your environment (if not already active)
@@ -95,7 +92,7 @@ conda activate fdabench
 # Run your first example - automatically loads from HuggingFace
 python examples/run_planning_agent.py
 
-# Run with a specific sample (0-116 available)
+# Run with a specific sample
 python examples/run_planning_agent.py --index 10
 
 # Run with a custom model
@@ -114,13 +111,19 @@ FDABench-Full supports multiple database types including Snowflake, Bigquery and
 
 **Spider2-lite Dataset**: Download from [Spider2 spider-agent-lite](https://github.com/xlang-ai/Spider2/tree/main/methods/spider-agent-lite)
 
-#### 2. Cloud Databases  
+#### 2. Cloud Databases
 
 **BigQuery and Snowflake**: Follow registration and setup instructions from [Spider2 README](https://github.com/xlang-ai/Spider2/blob/main/README.md)
 
 #### 3. Unstructured Data
 
-**Unstructured Dataset**: Download from [Google Drive](https://drive.google.com/file/d/1so5dvpB2aroy4NMaxh4FmnmGhGhPGvIs/view?usp=sharing)
+**Raw multimodal corpus**: Download from [`FDAbench2026/FDABench-File`](https://huggingface.co/datasets/FDAbench2026/FDABench-File) (1,418 PDFs, 246 images, 108 audio, 81 video across 50 domain categories).
+
+```bash
+huggingface-cli download FDAbench2026/FDABench-File --repo-type=dataset --local-dir ./Vector_Database
+```
+
+For the FAISS index over this corpus, build your own with `FDABench.utils.vector_index_builder` (recommended) so chunk size and embedding model match your evaluation setup.
 
 #### 4. Configure Database Paths
 
@@ -130,14 +133,14 @@ Edit `FDABench/utils/database_connection_manager.py` and update the configuratio
 default_config = {
     # SQLite database paths
     'bird_db_path': "/your/path/to/BIRD_train/train_databases",
-    'local_db_path': "/your/path/to/local/databases", 
+    'local_db_path': "/your/path/to/local/databases",
     'spider1_db_path': "/your/path/to/spider1/databases",
-    
+
     # Cloud database credentials
     'bigquery_credentials_path': "/your/path/to/bigquery-service-account.json",
     'snowflake_config': {
         'account': 'your-snowflake-account',
-        'user': 'your-username', 
+        'user': 'your-username',
         'password': 'your-password',
         'warehouse': 'your-warehouse',
         'database': 'your-database'
@@ -150,13 +153,13 @@ default_config = {
 your_databases/
 ├── BIRD_train/train_databases/
 │   ├── california_schools/
-│   │   └── california_schools.sqlite  
+│   │   └── california_schools.sqlite
 │   ├── card_games/
 │   │   └── card_games.sqlite
 │   └── ...
 ├── spider1_databases/
 │   ├── concert_singer.sqlite
-│   ├── pets_1.sqlite  
+│   ├── pets_1.sqlite
 │   └── ...
 ├── local_databases/
 │   └── merchant_data.db
@@ -164,11 +167,11 @@ your_databases/
     └── bigquery-service-account.json
 ```
 
-#### 5. Dataset Configuration
+#### 6. Dataset Configuration
 
 **HuggingFace Dataset (Default)**: The benchmark uses the `FDAbench2026/Fdabench-Lite` dataset from HuggingFace, which includes:
 - 289 curated test cases
-- Three subsets (report, single, multiple )
+- Three subsets (report, single, multiple)
 - Multiple database types (BIRD, local, Spider2-lite)
 - Various difficulty levels (easy, medium, hard)
 
@@ -180,7 +183,7 @@ from FDABench.utils.test_utils import load_test_data
 # Load the first sample (default)
 test_data = load_test_data()
 
-# Load a specific sample by index (0-116)
+# Load a specific sample by index
 test_data = load_test_data(index=10)
 ```
 
@@ -205,7 +208,7 @@ python examples/run_reflection_agent.py --index 50
 python examples/run_tooluse_agent.py --index 100
 
 # All agents support the same parameters:
-# --index N: Select sample N from the dataset (0-116)
+# --index N: Select sample N from the dataset
 # --model "model_name": Specify the LLM model to use
 ```
 
@@ -254,7 +257,7 @@ python FDABench/examples/test_planning_agent_pz_batch.py
 
 **Note**: Data Agent with semantic operator require additional environment setup. Check the respective environment files:
 - `FDABench/examples/docetl_environment.yml`
-- `FDABench/examples/lotus_environment.yml` 
+- `FDABench/examples/lotus_environment.yml`
 - `FDABench/examples/palimpzest_environment.yml`
 
 ### Basic Usage Example
@@ -293,103 +296,6 @@ All test results are automatically saved to:
 - `results/` - DuckDB files with test results and metrics
 - `FDABench/examples/data/` - Temporary processing files
 
-### Vector Index Building and Search
-
-The `VectorSearchTool` enables semantic search over unstructured documents using **FAISS + OpenAI Embeddings**.
-
-#### Option A: Download Pre-built Index (Recommended)
-
-Download the pre-built FAISS index from [Google Drive](https://drive.google.com/file/d/1rZK4aHRlTxY0ZditkXnU2rUcOhG7_qVN/view?usp=sharing) and extract to project root:
-
-```bash
-cd /path/to/FDAbench
-
-# Download storage_faiss.tar.gz, then extract
-tar xzvf storage_faiss.tar.gz
-
-# This creates ./storage_faiss/ directory with:
-#   - faiss.index     (FAISS vector index)
-#   - chunks.json     (text chunks with metadata)
-#   - config.json     (index configuration)
-```
-
-Now you can use `VectorSearchTool` directly:
-```python
-from FDABench.tools.search_tools import VectorSearchTool
-
-# Uses ./storage_faiss by default
-tool = VectorSearchTool()
-result = tool.execute(query="machine learning", top_k=5)
-```
-
-#### Option B: Build Index from Source
-
-If you need to rebuild or customize the index:
-
-**1. Download Unstructured Data**
-
-Download the raw documents from [Google Drive](https://drive.google.com/file/d/1rZK4aHRlTxY0ZditkXnU2rUcOhG7_qVN/view?usp=sharing) containing 50 domain categories with PDFs and other files.
-
-**2. Build Vector Index**
-
-```bash
-cd /path/to/FDAbench
-export OPENAI_API_KEY="your-openai-api-key"
-
-python -m FDABench.utils.vector_index_builder \
-    --doc-path /path/to/Vector_Database \
-    --index-path ./storage_faiss \
-    --unified \
-    --chunk-size 1024
-```
-
-**Builder Options:**
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--doc-path` | Path to document categories | Required |
-| `--index-path` | Where to save the index | `./storage_faiss` |
-| `--unified` | Merge all categories into one index | Flag |
-| `--chunk-size` | Text chunk size in characters | 1024 |
-| `--chunk-overlap` | Overlap between chunks | 200 |
-| `--api-key` | OpenAI API key | Uses `OPENAI_API_KEY` env |
-
-**Features:**
-- Supports PDF files (via pdfplumber/PyPDF2)
-- 50 concurrent embedding requests
-- Auto-truncation for long texts (max 30K chars)
-- Timeout handling for problematic PDFs (30s)
-- Skips failed chunks and continues
-
-#### Using VectorSearchTool
-
-```python
-from FDABench.tools.search_tools import VectorSearchTool
-
-# Initialize (uses ./storage_faiss by default)
-tool = VectorSearchTool()
-
-# Or specify custom path
-tool = VectorSearchTool(storage_path="./my_index", api_key="your-key")
-
-# Search
-result = tool.execute(query="machine learning in healthcare", top_k=5)
-
-if result["status"] == "success":
-    print(f"Found {result['num_results']} results")
-    print(result["results"])  # Formatted output
-
-    # Access raw results
-    for r in result["raw_results"]:
-        print(f"Score: {r['score']:.4f}, Category: {r['metadata']['category']}")
-```
-
-**Example Output:**
-```
-[Rank 1] (Score: 0.6523)
-Category: Healthcare_Medical Systems | File: medical_ai.pdf
-Content: This paper presents a novel approach to...
-```
-
 ## Dataset Generation (PUDDING)
 
 **PUDDING** is an agentic dataset construction framework that combines LLM generation with iterative expert validation. It operates in three phases:
@@ -407,7 +313,7 @@ See [PUDDING/README.md](PUDDING/README.md) for detailed documentation.
 
 ## Custom Agent Integration
 
-Inherit from `BaseAgent` to create custom agents:
+Inherit from `BaseAgent` to create custom agents, or use the `CustomAgent` / `CustomTool` scaffolds under `FDABench/custom/` as a starting point:
 
 ```python
 from FDABench.core.base_agent import BaseAgent
@@ -438,10 +344,11 @@ FDABench/
 ├── FDABench/                # Main package
 │   ├── agents/              # Agent implementations (planning, multi, reflection, tool-use)
 │   ├── core/                # Base classes, token tracking, tool registry
+│   ├── custom/              # Scaffolds for custom agents and tools
 │   ├── evaluation/          # Evaluation and scoring tools
 │   ├── tools/               # Schema, SQL, search tools
 │   └── utils/               # Database connection, utilities
-├── PUDDING/           # Dataset generation framework (see PUDDING/README.md)
+├── PUDDING/                 # Dataset generation framework (see PUDDING/README.md)
 ├── examples/                # Usage examples
 ├── results/                 # Test results (DuckDB files)
 └── environment.yml          # Conda environment
@@ -476,9 +383,19 @@ Example format:
 
 If you find FDABench useful in your research, please consider citing our paper:
 ```
+@inproceedings{wang2026fdabench,
+  title     = {FDABench: A Benchmark for Data Agents on Analytical Queries over Heterogeneous Data},
+  author    = {Wang, Ziting and Zhang, Shize and Yuan, Haitao and Zhu, Jinwei and Dong, Wei and Cong, Gao},
+  booktitle = {Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)},
+  year      = {2026},
+  note      = {To appear}
+}
+```
+
+```
 @article{wang2025fdabench,
   title={FDABench: A Benchmark for Data Agents on Analytical Queries over Heterogeneous Data},
-  author={Wang, Ziting and Zhang, Shize and Yuan, Haitao and Zhu, Jinwei and Li, Shifu and Dong, Wei and Cong, Gao},
+  author={Wang, Ziting and Zhang, Shize and Yuan, Haitao and Zhu, Jinwei and Dong, Wei and Cong, Gao},
   journal={arXiv preprint arXiv:2509.02473},
   year={2025}
 }
