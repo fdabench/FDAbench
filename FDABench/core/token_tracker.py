@@ -81,7 +81,7 @@ class TokenTracker:
         return entry
     
     def get_total_tokens(self) -> Dict[str, int]:
-        """Get total input, output and combined tokens"""
+        """Get total input, output and combined token counts across all tracked calls"""
         return {
             "input": sum(entry.input_tokens for entry in self.entries),
             "output": sum(entry.output_tokens for entry in self.entries),
@@ -89,7 +89,7 @@ class TokenTracker:
         }
     
     def get_total_cost(self) -> float:
-        """Get total cost from API responses"""
+        """Get total cost from API responses; entries without cost information are skipped"""
         return sum(entry.cost for entry in self.entries if entry.cost is not None)
     
     def get_breakdown_by_category(self) -> Dict[str, Dict[str, Any]]:

@@ -9,9 +9,19 @@ from typing import Dict, List, Any, Optional
 
 
 class RubricEvaluator:
-    def __init__(self, api_key: str = None, model: str = "anthropic/claude-opus-4.5"):
+    def __init__(self, api_key: str = None, model: str = "anthropic/claude-opus-4.5",
+                 truncate_reports: bool = True):
         self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         self.model = model
+        # Reports shown to the judge are truncated by default (1000/1500 chars).
+        # Pass truncate_reports=False to score the full report text.
+        self.truncate_reports = truncate_reports
+
+    def _clip(self, text: str, limit: int) -> str:
+        """Truncate text to `limit` chars; no-op when truncation is disabled."""
+        if not self.truncate_reports or text is None:
+            return text
+        return text[:limit]
 
     def _call_llm(self, prompt: str, max_tokens: int = 500) -> str:
         try:
@@ -42,7 +52,7 @@ class RubricEvaluator:
             prompt = f"""Does this report correctly state or interpret the SQL result?
 
 SQL Result: {gold_sql_result}
-Report excerpt (first 1000 chars): {agent_report[:1000]}
+Report excerpt: {self._clip(agent_report, 1000)}
 
 Answer with:
 - "YES" if the report mentions or correctly interprets this value
@@ -66,8 +76,8 @@ Answer (YES/NO):"""
 
         prompt = f"""Evaluate if this report integrates external knowledge with database findings.
 
-Report (first 1500 chars):
-{agent_report[:1500]}
+Report:
+{self._clip(agent_report, 1500)}
 
 Expected external knowledge sources:
 Web searches: {json.dumps(web_summaries, ensure_ascii=False)[:800]}
@@ -100,8 +110,8 @@ Respond with just a number (0.0, 0.5, or 1.0):"""
 Expected reasoning chain:
 {chain_desc}
 
-Report (first 1500 chars):
-{agent_report[:1500]}
+Report:
+{self._clip(agent_report, 1500)}
 
 Score 0-1 based on:
 - 0.0: No logical flow, random statements
@@ -126,8 +136,8 @@ Respond with just a number (0.0, 0.5, or 1.0):"""
 
 Query: {enhanced_query}
 
-Report (first 1500 chars):
-{agent_report[:1500]}
+Report:
+{self._clip(agent_report, 1500)}
 
 Score 0-1 based on:
 - 0.0: Fails to address the query

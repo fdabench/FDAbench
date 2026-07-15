@@ -58,8 +58,8 @@ def perplexity_search(query: str, use_web_search: bool = True, api_key: Optional
             temperature=0.7,
             max_tokens=4000,
             extra_headers={
-                "HTTP-Referer": "https://github.com/wa../FDABench",
-                "X-Title": "FDABenchmark Perplexity Search"
+                "HTTP-Referer": "https://github.com/fdabench/FDAbench",
+                "X-Title": "FDABench Perplexity Search"
             }
         )
         
